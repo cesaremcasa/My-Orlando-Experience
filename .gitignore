@@ -27,3 +27,5 @@ index/
 *.npy
 *.npz
 *.log
+.env
+.env
