@@ -10,135 +10,93 @@ Enable families to plan efficient, stress-free Orlando vacations using verified 
 
 The system operates on three isolated knowledge layers:
 
-- **CORE**: Contains atomic factual statements (e.g., park hours, locations, early entry rules). Each chunk represents one entity, one attribute, and one value.
-- **CONTEXT_INTELLIGENCE**: Derived from visitor behavior observations. Addresses pain points such as crowd management, heat stress, and family logistics.
-- **EXPERIENCE_STRATEGY**: Focuses on trip optimization patterns, including itinerary structuring, wait-time reduction, and seasonal planning.
+- **CORE**: Atomic factual statements (e.g., park hours, early entry rules). One entity, one attribute, one value per chunk.
+- **CONTEXT_INTELLIGENCE**: Insights from real visitor behavior (crowd patterns, heat management, family logistics).
+- **EXPERIENCE_STRATEGY**: Trip optimization patterns (itinerary design, wait-time reduction, seasonal planning).
 
-Each layer is independently indexed using FAISS and can be queried separately to ensure response fidelity.
+Each layer is independently embedded and indexed with FAISS for precise, contamination-free retrieval.
 
 ## Technical Specifications
 
-- **Operating System**: Amazon Linux 2023
-- **Instance Type**: t3.xlarge (CPU-only, no GPU)
-- **Python Version**: 3.11 (isolated via virtual environment)
-- **Embedding Model**: `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional, optimized for CPU)
-- **Vector Database**: FAISS (IndexFlatL2)
-- **LLM Backend**: OpenAI `gpt-4o-mini` (via REST API)
-- **Key Dependencies**: `faiss-cpu`, `unstructured[pypdf]`, `openai`, `python-dotenv`, `sentence-transformers`, `langchain`, `langchain-community`, `langchain-openai`
-- **Deployment Model**: CLI-only, no Docker, no cloud abstractions
+- **OS**: Amazon Linux 2023
+- **Instance**: t3.xlarge (CPU-only)
+- **Python**: 3.11 (virtual environment)
+- **Embedding Model**: sentence-transformers/all-MiniLM-L6-v2 (CPU-optimized)
+- **Vector Store**: FAISS (IndexFlatL2)
+- **LLM**: OpenAI gpt-4o-mini (via API)
+- **Key Dependencies**: faiss-cpu, unstructured[pypdf], openai, python-dotenv, sentence-transformers, langchain, langchain-community, langchain-openai
+- **Deployment**: Pure CLI, no Docker, no managed services
 
 ## Project Structure
+
 orlando-experience-rag/
 ├── data/
-│   ├── raw_pdfs/               # Source documents (excluded from version control)
-│   ├── processed/              # Cleaned text output (.jsonl)
-│   ├── core_atomic/            # Atomic facts (strictly validated entries)
-│   ├── context_intelligence/   # Visitor behavior insights
-│   ├── experience_strategy/    # Strategic trip-planning patterns
-│   ├── embeddings/             # Embeddings for each layer (.npy + metadata)
-│   └── index/                  # FAISS indexes (one per layer)
-├── 01_parse_pdfs.py
-├── 07_parse_core_atomic.py
-├── 09_rebuild_travel_layers.py
-├── 10_validate_atomic_core.py
-├── 11_answer_with_llm.py
-├── retrieval_pipeline.py
-├── generation_log.csv
-├── .env.example
+│   ├── raw_pdfs/               # Source PDFs (.gitignored)
+│   ├── processed/              # Cleaned .jsonl output
+│   ├── core_atomic/            # Validated atomic facts
+│   ├── context_intelligence/   # Behavioral insights
+│   ├── experience_strategy/    # Strategic patterns
+│   ├── embeddings/             # Layer embeddings (.npy + metadata)
+│   └── index/                  # FAISS indexes per layer
+├── 01_parse_pdfs.py            # PDF ingestion
+├── 07_parse_core_atomic.py     # Atomic fact extraction
+├── 09_rebuild_travel_layers.py # Build CONTEXT and STRATEGY layers
+├── 10_validate_atomic_core.py  # Validate atomic chunks
+├── 11_answer_with_llm.py       # Empathetic LLM answers
+├── retrieval_pipeline.py       # Unified retrieval interface
+├── generation_log.csv          # Query/response observability log
+├── .env.example                # API key template
 ├── .gitignore
 └── README.md
-text## Setup and Installation
 
-1. Create and activate virtual environment:
-   ```bash
+## Usage
+
+1. Environment Setup
    python3.11 -m venv .venv
    source .venv/bin/activate
+   pip install faiss-cpu unstructured[pypdf] openai python-dotenv sentence-transformers
 
-Install dependencies:Bashpip install --upgrade pip
-pip install faiss-cpu unstructured[pypdf] openai python-dotenv sentence-transformers langchain langchain-community langchain-openai
-Configure API key (only when testing):Bashcp .env.example .env
-# Edit .env and add: OPENAI_API_KEY=sk-...
+2. Configure API Key
+   cp .env.example .env
+   # Insert your OpenAI API key into .env
 
-Data Processing Pipeline
-Run scripts in order (they are idempotent):
-Bashpython 01_parse_pdfs.py
-python 07_parse_core_atomic.py
-python 09_rebuild_travel_layers.py
-python 10_validate_atomic_core.py  # Validates CORE atomicity
-Usage Examples
-Bash# Factual query (maximum precision)
-python 11_answer_with_llm.py "What time does Magic Kingdom open on December 25, 2025?" --layer core
+3. Ask a Question
+   python 11_answer_with_llm.py "What time does Magic Kingdom open?" --layer core
 
-# Contextual advice
-python 11_answer_with_llm.py "How to handle crowds with small children in December?" --layer context
+## Pipeline Phases
 
-# Strategic planning
-python 11_answer_with_llm.py "Best park order for a 4-day trip in December 2025?" --layer strategy
+Phase                    Script                           Purpose
+Ingestion                01_parse_pdfs.py                 Extract text from PDFs using unstructured + pypdf fallback
+Atomic Parsing           07_parse_core_atomic.py          Generate strict atomic facts from canonical hours document
+Layer Construction       09_rebuild_travel_layers.py      Filter and chunk travel-relevant content for CONTEXT and STRATEGY
+Validation               10_validate_atomic_core.py       Enforce one entity / one attribute / one value per chunk
+Retrieval                retrieval_pipeline.py            Perform FAISS top-k search on specified layer
+Generation               11_answer_with_llm.py            Generate empathetic, grounded 2-sentence responses
 
-# Combined layers
-python 11_answer_with_llm.py "Plan a Christmas Day at Disney for a family with toddlers" --layer all
-Pipeline Phases
+## Observability
 
+- All queries and responses are logged to generation_log.csv.
+- The CORE layer is validated to ensure atomic compliance.
+- Layer isolation prevents factual contamination.
 
+## Source Documents
 
+- ORLANDO_DEEPSEARCH_KB.pdf: Real visitor experiences, accessibility, heat policies.
+- A Strategic DeepResearch Plan for the Orlando Visitor Experience.pdf: Itinerary frameworks, operational integration.
+- Orlando_Park_Hours_Dez2025.pdf (canonical): Structured hours, locations, and rules for CORE layer.
 
+## Security and Reproducibility
 
+- API keys are managed via .env (excluded from Git).
+- .env.example provides a safe template for replication.
+- All data artifacts (embeddings, indexes, processed text) are versioned.
+- After testing, remove .env to prevent credential exposure.
 
+## Design Philosophy
 
+This MVP demonstrates that high-quality RAG can be built with minimal infrastructure when data quality, layering, and validation are rigorously enforced. It avoids abstractions (Docker, serverless) in favor of deterministic, CLI-only engineering—making it fully reproducible and portfolio-ready.
 
+## Author
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-PhaseScriptDescriptionIngestion01_parse_pdfs.pyExtracts text from PDFs using unstructured + pypdf fallbackAtomic Parsing07_parse_core_atomic.pyGenerates strict atomic facts from canonical hours documentLayer Construction09_rebuild_travel_layers.pyBuilds travel-relevant chunks for CONTEXT and STRATEGY layersValidation10_validate_atomic_core.pyEnforces one entity / one attribute / one value per CORE chunkRetrievalretrieval_pipeline.pyFAISS top-k retrieval from specified layerGeneration11_answer_with_llm.pyEmpathetic 2-sentence response strictly grounded in retrieved context
-Observability & Safety
-
-All queries/responses logged to generation_log.csv
-Layer isolation prevents fact contamination
-.env excluded from git and should be deleted after testing
-
-Source Documents
-
-Orlando_Park_Hours_Dez2025.pdf → Canonical source for CORE layer (December 2025 hours)
-ORLANDO_DEEPSEARCH_KB.pdf → Real visitor experiences and operational challenges
-A Strategic DeepResearch Plan for the Orlando Visitor Experience.pdf → Optimization frameworks
-
-Design Philosophy
-This MVP demonstrates engineering discipline in constrained environments:
-
-Zero infrastructure abstractions
-Pure CLI execution on single EC2 instance
-High-fidelity RAG achieved through rigorous data structuring and layer isolation
-Fully reproducible, secure, and portfolio-ready
-
-Author
 Cesar Augusto
 Founder & CEO, ORCA
