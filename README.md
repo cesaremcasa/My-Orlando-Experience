@@ -91,17 +91,17 @@ Validation Layer (future):
 │   ├── core_atomic/
 │   │   └── core_atomic_facts.jsonl
 │   ├── index/
-│   │   └── faiss.index
+│   │   └── faiss.index            # CORE layer FAISS
 │   ├── context_intelligence/
 │   │   └── context_intelligence.faiss
 │   └── experience_strategy/
 │       └── experience_strategy.faiss
-├── generation_log.csv
-├── chunk_embed.log
-├── parse_metrics.log
-├── requirements.txt
-├── .env.example
-├── .gitignore
+├── generation_log.csv             # Query/response logging (CSV)
+├── chunk_embed.log                # Chunking & embedding metrics
+├── parse_metrics.log              # PDF parsing stats
+├── requirements.txt               # Exact dependency snapshot
+├── .env.example                   # API key template
+├── .gitignore                     # Excludes venv, .env, __pycache__
 ├── LICENSE
 └── README.md
 
@@ -160,7 +160,27 @@ These visuals confirm the operational backbone of the system.
 
 ## 11. License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License 
+
+Copyright (c) 2025 Cesar Augusto
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 Cesar Augusto
 Founder & CEO, ORCA
