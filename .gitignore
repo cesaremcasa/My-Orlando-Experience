@@ -1,11 +1,11 @@
-# Virtual environment
+# Virtual environments
 venv/
 .venv/
 
 # Secrets
 .env
 
-# Python artifacts
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -13,10 +13,7 @@ __pycache__/
 .Python
 *.so
 
-# Logs (optional: you may keep them for demo; remove if preferred)
-# chunk_embed.log
-# parse_metrics.log
-# parse_pdfs.log
+# Logs (mantidos no repo para observabilidade)
 
 # Editors
 .DS_Store
