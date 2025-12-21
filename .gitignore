@@ -1,5 +1,25 @@
+# Virtual environment
 venv/
+.venv/
+
+# Secrets
 .env
+
+# Python artifacts
 __pycache__/
 *.pyc
-*.log
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Logs (optional: you may keep them for demo; remove if preferred)
+# chunk_embed.log
+# parse_metrics.log
+# parse_pdfs.log
+
+# Editors
+.DS_Store
+.vscode/
+*.swp
+*.swo
