@@ -1,220 +1,192 @@
-# Orlando Experience RAG Backend (MVP Architecture)
+# Orlando Experience RAG Backend (v0.2.0-alpha)
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
-![Framework](https://img.shields.io/badge/Framework-CLI--only-green)
-![Status](https://img.shields.io/badge/Status-MVP-orange)
+![Framework](https://img.shields.io/badge/Framework-FastAPI%20%7C%20Uvicorn-green)
+![Architecture](https://img.shields.io/badge/Architecture-Decoupled%20RAG%20%7C%20Context%20Fusion-orange)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-A modular, architecture-first backend for a **Travel Retrieval-Augmented Generation (RAG)** system built on Orlando theme park visitor data and operational insights.
+A modular, production-grade backend for a Travel Retrieval-Augmented Generation (RAG) system built on Orlando theme park visitor data and operational insights.
 
-This MVP focuses on **correct engineering structure**, **clean subsystem boundaries**, and **production-style organization**, serving as a blueprint for how a real travel RAG backend is built. It is intentionally implementation-light so the architecture can be evaluated safely and clearly.
+This project demonstrates system design principles, correct engineering structure, and clean subsystem boundaries. It evolved from a CLI prototype into a RESTful API service capable of real-time retrieval, automated validation, and response generation.
 
 ---
 
-## 1. Overview
+## Overview
 
 The system defines all essential layers required in a modern RAG backend:
 
-- CLI service (`src/respond/generate_response.py`)
-- Modular retrieval subsystem with three isolated knowledge layers
-- Parsing layer for PDFs and text chunks
-- Configurable LLM client wrapper (`gpt-4o-mini`)
-- Structured logging with timestamp, query, and response
-- Centralized configuration via `.env`
-- Operational scripts for ingestion & index building
+- **FastAPI Service** (`src/api/main.py`) for request handling
+- **ContextFusionEngine** (`src/retrieve/context_fusion.py`) for optimized retrieval
+- **Guardrails Layer** (`src/validate/grounding_check.py`) for hallucination prevention
+- **Automated Testing** (`tests/evaluation/`) for regression checks
+- **Local-First Architecture**: CPU-optimized (FAISS-CPU + SentenceTransformers)
+- **Observability**: Structured JSON logging with latency and grounding metrics
 
-> **Key Differentiator:** Unlike single-vector RAGs, this system queries three independent FAISS indexes (CORE, CONTEXT_INTELLIGENCE, EXPERIENCE_STRATEGY) and fuses responses to deliver answers that are factual, contextual, and strategic — mirroring real human travel decision-making.
-
-This project demonstrates **engineering discipline**, not raw capability: clean separation of concerns, explicit interfaces, reproducible scripts, and an extendable design.
+**Key Differentiator:** The system employs a decoupled RAG architecture designed to solve critical production challenges: **Context Contamination** and **Stale Knowledge**. Retrieval and validation logic are isolated into dedicated services, ensuring that the backend remains performant (~20ms local retrieval) and verifiable, independent of the LLM provider. This separation enables real-time knowledge updates without model retraining and prevents context drift across retrieval cycles.
 
 ---
 
-## 2. Current Capabilities (MVP Scope)
+## Current Capabilities (v0.2.0-alpha)
 
-### CLI Interface
-- Accepts natural language queries
-- Returns empathetic, user-concern-mirroring answers
-- Logs every interaction to `generation_log.csv`
+### FastAPI Interface
+- **Endpoint:** `POST /query`
+- Accepts natural language queries via JSON
+- Returns structured responses including `response`, `grounding_score`, `latency_ms`, and `sources`
 
-### Logging
-- Structured CSV format with fields: `timestamp`, `question`, `layer`, `response`
+### Retrieval System (ContextFusionEngine)
+- Loads FAISS-CPU indexes at startup
+- Uses SentenceTransformers (`all-MiniLM-L6-v2`) for local embeddings with low latency
+- Queries the CORE knowledge layer for atomic facts
+
+### Validation Layer (Guardrails)
+- Implements Jaccard Index logic with Time Normalization (e.g., matching `9h00` to `9:00 AM`)
+- Calculates `grounding_score` (0.0 to 1.0) to signal confidence and act as a **Hallucination Prevention** mechanism
+- Serves as a defensive measure against hallucination by checking entity overlap between context and response, ensuring factual consistency
+
+### Testing & Quality Assurance
+- **Automated Integration Tests**: `test_core_facts.py` validates retrieval using Entity Extraction (Regex-based). The use of Entity Extraction for QA is a robust pattern chosen over fragile Exact-Match tests, ensuring that only the **Functional Correctness** of the facts is validated, independent of LLM phrasing variations.
+- **Performance Telemetry**: Every request logs local latency vs. total latency
 
 ### Configuration
 - Central `.env` file (never committed)
-- Defines `OPENAI_API_KEY`, model, and paths
-
-### Scripts
-- `src/ingest/ingest_and_embed.py` — PDF → chunks → FAISS indexes
-- `src/retrieve/multi_layer_retriever.py` — queries all three layers
-- `src/respond/generate_response.py` — LLM orchestration + empathy + logging
-
-### Tests
-- Manual validation via CLI execution and log inspection
-- All CORE facts manually verified against official sources
+- Defines `OPENAI_API_KEY` and model settings
 
 ---
 
-## 3. Architectural Intent
+## Architectural Intent
 
-This MVP establishes the **blueprint** for a full travel RAG pipeline. All subsystems exist in their production form — only logic is missing, by design.
+The system is designed as a 3-layer pipeline, optimized for CPU-bound environments (AWS EC2 t3.xlarge).
 
-### Retrieval Layer (`data/`)
-- **CORE**: `data/core_atomic/core_atomic_facts.jsonl` → `data/index/faiss.index`
-- **CONTEXT_INTELLIGENCE**: `data/context_intelligence/context_intelligence.faiss`
-- **EXPERIENCE_STRATEGY**: `data/experience_strategy/experience_strategy.faiss`
+### 1. Retrieval Layer (`src/retrieve/`)
+- **Technology**: FAISS IndexFlatL2 + SentenceTransformers
+- **Strategy**: Local inference for embeddings to minimize network overhead
+- **Performance**: ~20ms average retrieval latency (cold start)
 
-> Each layer is physically and logically isolated to prevent factual contamination.
+### 2. Orchestration Layer (`src/api/`)
+- **Technology**: FastAPI with Uvicorn
+- **Design**: Global initialization of the `ContextFusionEngine` to ensure memory efficiency and avoid reloading models on every request
 
-### Parsing Layer (`src/ingest/`)
-- PDF text extraction via `unstructured[pdf]`
-- Atomic chunking for CORE facts
-- Travel-relevant filtering for CONTEXT and STRATEGY layers
+### 3. Validation Layer (`src/validate/`)
+- **Logic**: Token-based intersection checks
+- **Robustness**: Includes regex normalization for time formats (24h vs AM/PM) to reduce false positives in grounding checks
 
-### LLM Layer (`src/respond/`)
-- Unified interface for `gpt-4o-mini`
-- Empathetic response template (mirrors user concern)
-- Safe fallback: "Check the official website" when uncertain
-
-### Validation Layer (planned)
-- Grounding interface
-- Citation check hook
-
-Ready for RAG hallucination prevention once retrieval + LLM integration exist.
+### 4. LLM Layer (External)
+- **Provider**: OpenAI (`gpt-4o-mini`)
+- **Role**: Synthesizes the retrieved context into a natural, empathetic response
+- **Economics**: Chosen for optimal cost/performance ratio on a startup-scale MVP
 
 ---
 
-## 4. Project Structure
+## Project Structure
 
 ```
 .
 ├── src/
-│   ├── ingest/                  # PDF → text → chunks → FAISS
-│   ├── retrieve/                # 3-layer retrieval logic
-│   ├── respond/
-│   │   └── generate_response.py # LLM + empathy + logging
-│   └── utils/                   # helpers (optional)
+│   ├── api/                     # FastAPI application & Endpoints
+│   │   └── main.py              # POST /query, Global Engine Init
+│   ├── retrieve/                # Retrieval Logic (The Engine)
+│   │   └── context_fusion.py   # FAISS Wrapper & Embedding
+│   ├── validate/                # Guardrails & Safety
+│   │   └── grounding_check.py  # Jaccard Index & Time Normalization
+│   ├── respond/                 # Legacy CLI Interface
+│   │   └── generate_response.py
+│   └── ingest/                  # Data Processing Scripts
+├── tests/
+│   └── evaluation/
+│       └── test_core_facts.py   # Automated QA (Entity Extraction)
 ├── data/
-│   ├── core_atomic/
-│   │   └── core_atomic_facts.jsonl
-│   ├── index/
-│   │   └── faiss.index          # CORE layer FAISS index
-│   ├── context_intelligence/
-│   │   └── context_intelligence.faiss
-│   └── experience_strategy/
-│       └── experience_strategy.faiss
-├── generation_log.csv           # Query/response logging
-├── chunk_embed.log              # Chunking & embedding metrics
-├── parse_metrics.log            # PDF parsing stats
+│   ├── index/                   # CORE FAISS Index
+│   ├── embeddings/              # Metadata for Index Mapping
+│   └── core_atomic/             # Golden Dataset
 ├── requirements.txt
-├── .env.example                 # Template for .env
+├── .env.example
 ├── .gitignore
 ├── LICENSE
 └── README.md
 ```
 
-This mirrors real production RAG services where each subsystem evolves independently.
-
 ---
 
-## 5. Installation
+## Installation & Setup
 
 Requires **Python 3.11+**.
 
 ```bash
-python3 -m venv venv
+# 1. Environment Setup
+python3.11 -m venv venv
 source venv/bin/activate
+
+# 2. Install Dependencies
 pip install -r requirements.txt
-```
+pip install fastapi uvicorn pydantic
 
----
-
-## 6. Running the System
-
-```bash
+# 3. Configuration
 cp .env.example .env
-# Edit .env and add your OpenAI API key
-
-python src/respond/generate_response.py "What time does Magic Kingdom open in June?"
+# Edit .env and add your OPENAI_API_KEY
 ```
-
-Output is printed to stdout and logged to `generation_log.csv`.
 
 ---
 
-## 7. Reprocessing and Index Building
+## Running the System
 
-**Reset processed data:**
+### Option A: Production API (Recommended)
+Start the Uvicorn server:
+
 ```bash
-rm -rf data/processed/
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-**Rebuild indexes:**
+**Example Request:**
 ```bash
-python src/ingest/ingest_and_embed.py
+curl -X POST "http://localhost:8000/query" \
+     -H "Content-Type: application/json" \
+     -d '{"question": "What time does Magic Kingdom open?"}'
 ```
 
-Both scripts validate configuration & logging pipelines and set up the environment for future embedding + retrieval logic.
+**Response Format:**
+```json
+{
+  "response": "Magic Kingdom opens at 9:00 AM during December 2025...",
+  "grounding_score": 0.17,
+  "latency_ms": 1552.51,
+  "sources": ["Source: Magic Kingdom operating", "Source: Animal Kingdom operating"]
+}
+```
+
+### Option B: Legacy CLI
+For debugging or direct terminal usage:
+
+```bash
+python src/respond/generate_response.py "What time does Magic Kingdom open?"
+```
 
 ---
 
-## 8. Current Status (MVP Reality)
+## Model Strategy & Economics
 
-This repository is in **Phase 1 — Architectural Scaffolding**.
+We selected `gpt-4o-mini` over larger models (like GPT-4) for this architecture:
 
-Functional components intentionally remain unimplemented:
-
-| Subsystem | Current Behavior |
-|-----------|------------------|
-| Retrieval | Placeholder responses (no actual retrieval yet) |
-| Parsers | PDF text extraction implemented |
-| LLM generation | Empathetic, user-centered responses |
-| Grounding | Always passes (not implemented) |
-| Index building | FAISS indices pre-built |
-
-This design ensures the project is safe for public portfolio use while highlighting real engineering practices.
+1. **Latency Constraints:** The local retrieval pipeline is highly optimized (~20ms). Using a heavier LLM would disproportionately increase the total request time without adding factual value (since facts are retrieved via RAG).
+2. **Cost Efficiency:** ~$0.15 / 1M input tokens. This pricing makes high-volume testing feasible for an MVP budget.
+3. **Performance Parity:** For specific, fact-restricted tasks (like "What time does the park open?"), `mini` performs nearly identically to larger models because the intelligence comes from the fusion of context, not just parameter size.
 
 ---
 
-## 9. Roadmap (Production Path)
+## Current Status (v0.2.0-alpha)
 
-This MVP is structured so each subsystem can be expanded independently. Below is the planned evolution path for turning this architecture into a fully functional travel RAG backend.
+This repository is in **Phase 2 — Service Integration**.
 
-### Document Ingestion
-- Implement advanced PDF text extraction
-- Add HTML parsing (future)
-- Introduce text chunking with size + overlap control
-
-### Retrieval Layer
-- Generate embeddings using sentence-transformers
-- Build FAISS index for dense retrieval
-- Add hybrid fusion (RRF, weighted ranking)
-- Implement BM25 for sparse retrieval (optional)
-
-### LLM Integration
-- Connect LLMClient to OpenAI / Anthropic / local models
-- Create RAG-oriented prompt templates
-- Produce answers with citation mapping
-
-### Validation Layer
-- Implement citation grounding checks
-- Add confidence scoring
-- Introduce hallucination detection
-
-### Observability + Testing
-- Extend retrieval telemetry
-- Add metrics (latency, index hit ratios)
-- Implement integration + stress tests
-- Expand automated QA coverage
+| Subsystem | Status |
+|-----------|--------|
+| **FastAPI Service** | Implemented (`/query`, `/health`) |
+| **ContextFusionEngine** | Implemented (20ms latency) |
+| **Validation (Guardrails)** | Implemented (Jaccard + Regex) |
+| **Automated Testing** | Implemented (Entity Extraction) |
+| **Frontend UI** | External (Decoupled) |
 
 ---
 
-## 10. Screenshots (MVP Runtime Preview)
-
-No screenshots included — to be added in future releases.
-
----
-
-## 11. License
+## License
 
 **MIT License**
 
