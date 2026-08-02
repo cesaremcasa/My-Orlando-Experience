@@ -147,7 +147,7 @@ curl -X POST "http://localhost:8000/query" \
 ```json
 {
   "response": "Magic Kingdom opens at 9:00 AM during December 2025...",
-  "grounding_score": 0.17,
+  "grounding_score": 0.86,
   "latency_ms": 1552.51,
   "sources": ["Source: Magic Kingdom operating", "Source: Animal Kingdom operating"]
 }
@@ -201,4 +201,4 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 ---
 
 **Cesar Augusto**  
-Founder & CEO, ORCA
+AI Systems Engineer, Mycellium Lab
