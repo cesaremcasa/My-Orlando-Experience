@@ -118,7 +118,6 @@ source venv/bin/activate
 
 # 2. Install Dependencies
 pip install -r requirements.txt
-pip install fastapi uvicorn pydantic
 
 # 3. Configuration
 cp .env.example .env
