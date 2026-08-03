@@ -173,7 +173,7 @@ We selected `gpt-4o-mini` over larger models (like GPT-4) for this architecture:
 
 ## Current Status (v0.2.0-alpha)
 
-This repository is in **Phase 2 — Service Integration**.
+This repository is in **Phase 2, Service Integration**.
 
 | Subsystem | Status |
 |-----------|--------|
