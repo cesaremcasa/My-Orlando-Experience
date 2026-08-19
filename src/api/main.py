@@ -10,31 +10,29 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 # Import Core Modules
-from src.retrieve.context_fusion import ContextFusionEngine
 from src.validate.grounding_check import check_grounding
+from src.retrieve.contracts import RetrievedChunk, Retriever
+from src.respond.providers import ChatProvider, OpenAIProvider
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
 
 # Load Env
 load_dotenv()
 
-# --- Initialization ---
-# Initialize Engine Globally for performance
-try:
-    fusion_engine = ContextFusionEngine()
-except Exception as e:
-    print(f"[FATAL] Failed to initialize Fusion Engine: {e}")
-    fusion_engine = None
+# --- Lazy dependencies ---
+fusion_engine: Retriever | None = None
+provider: ChatProvider = OpenAIProvider()
 
-# Initialize LLM
-if not os.getenv("OPENAI_API_KEY"):
-    print("[WARN] OPENAI_API_KEY not found. LLM calls will fail.")
-    
-model = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+
+def get_fusion_engine() -> Retriever:
+    global fusion_engine
+    if fusion_engine is None:
+        from src.retrieve.context_fusion import ContextFusionEngine
+
+        fusion_engine = ContextFusionEngine()
+    return fusion_engine
 
 # FastAPI App
-app = FastAPI(title="Orlando RAG API", version="1.0.0")
+app = FastAPI(title="Orlando RAG API", version="0.3.0")
 
 # --- Request/Response Models ---
 class QueryRequest(BaseModel):
@@ -74,34 +72,23 @@ def query_endpoint(request: QueryRequest):
     """
     start_time = time.time()
     
-    if not fusion_engine:
+    try:
+        engine = get_fusion_engine()
+    except Exception:
         raise HTTPException(status_code=503, detail="Fusion Engine not initialized.")
     
     # 1. Retrieve Context
     try:
-        context_list = fusion_engine.retrieve(request.question, top_k=3)
+        retrieved = engine.retrieve(request.question, top_k=3)
+        context_list = [item.text if isinstance(item, RetrievedChunk) else str(item) for item in retrieved]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
     
     context_str = "\n".join(context_list)
     
-    # 2. Generate Response
-    template = """You are a thoughtful Orlando trip advisor.
-Answer the question using ONLY the verified facts provided in the Context below.
-Mirror the user's concern. If unsure, say so.
-Be concise, warm, and human.
-
-Context:
-{context}
-
-Question: {question}
-"""
-    
+    # 2. Generate Response through the lazy provider abstraction
     try:
-        prompt = ChatPromptTemplate.from_template(template)
-        chain = prompt | model
-        llm_response_obj = chain.invoke({"question": request.question, "context": context_str})
-        response_text = llm_response_obj.content
+        response_text = provider.generate(question=request.question, context=context_str)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Generation failed: {str(e)}")
         

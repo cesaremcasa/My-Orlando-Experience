@@ -1,4 +1,4 @@
-# Orlando Experience RAG Backend (v0.2.0-alpha)
+# Orlando Experience RAG Backend (v0.3.0)
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Framework](https://img.shields.io/badge/Framework-FastAPI%20%7C%20Uvicorn-green)
@@ -26,7 +26,7 @@ The system defines all essential layers required in a modern RAG backend:
 
 ---
 
-## Current Capabilities (v0.2.0-alpha)
+## Current Capabilities (v0.3.0)
 
 ### FastAPI Interface
 - **Endpoint:** `POST /query`
@@ -34,7 +34,7 @@ The system defines all essential layers required in a modern RAG backend:
 - Returns structured responses including `response`, `grounding_score`, `latency_ms`, and `sources`
 
 ### Retrieval System (ContextFusionEngine)
-- Loads FAISS-CPU indexes at startup
+- Loads FAISS-CPU indexes lazily on the first query
 - Uses SentenceTransformers (`all-MiniLM-L6-v2`) for local embeddings with low latency
 - Queries the CORE knowledge layer for atomic facts
 
@@ -71,7 +71,7 @@ The system is designed as a 3-layer pipeline, optimized for CPU-bound environmen
 - **Robustness**: Includes regex normalization for time formats (24h vs AM/PM) to reduce false positives in grounding checks
 
 ### 4. LLM Layer (External)
-- **Provider**: OpenAI (`gpt-4o-mini`)
+- **Provider**: lazy OpenAI adapter (`gpt-4o-mini`) with a deterministic test fake
 - **Role**: Synthesizes the retrieved context into a natural, empathetic response
 - **Economics**: Chosen for optimal cost/performance ratio on a startup-scale MVP
 
@@ -116,8 +116,8 @@ Requires **Python 3.11+**.
 python3.11 -m venv venv
 source venv/bin/activate
 
-# 2. Install Dependencies
-pip install -r requirements.txt
+# 2. Install the locked baseline (unit/dev path; RAG extras remain optional)
+uv sync --frozen --extra dev
 
 # 3. Configuration
 cp .env.example .env
@@ -173,7 +173,7 @@ We selected `gpt-4o-mini` over larger models (like GPT-4) for this architecture:
 
 ## Current Status (v0.2.0-alpha)
 
-This repository is in **Phase 2, Service Integration**.
+This repository is in **v0.3.0 grounded retrieval baseline**.
 
 | Subsystem | Status |
 |-----------|--------|

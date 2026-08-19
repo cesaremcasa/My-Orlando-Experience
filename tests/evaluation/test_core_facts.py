@@ -2,8 +2,10 @@ import os
 import sys
 import json
 import re
-import faiss
 import pytest
+
+pytestmark = pytest.mark.integration
+faiss = pytest.importorskip("faiss", reason="FAISS integration assets are optional")
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
