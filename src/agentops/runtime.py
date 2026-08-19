@@ -39,8 +39,8 @@ class AgentRuntime:
         self.memory = memory
         self.model = model
         self.fake_llm = fake_llm
-        self.root = None
-        self.session_service = None
+        self.root: Any | None = None
+        self.session_service: Any | None = None
 
     def ensure(self) -> None:
         if self.root is not None:
@@ -48,17 +48,12 @@ class AgentRuntime:
         from google.adk.sessions.in_memory_session_service import InMemorySessionService
 
         from src.agentops.agents import build_root_agent
-        from src.agentops.memory.embedder import FakeEmbedder
         from src.agentops.memory.store import LocalMemoryStore
 
         if self.retriever is None:
             raise RetrievalError()
         if self.memory is None:
-            self.memory = LocalMemoryStore(
-                root=data_dir(),
-                embedder=FakeEmbedder(),
-                use_faiss=False,
-            )
+            self.memory = LocalMemoryStore(root=data_dir())
         if self.model is None:
             if self.fake_llm is not None:
                 self.model = self.fake_llm.as_adk()
@@ -188,6 +183,8 @@ class AgentRuntime:
                         provenance=candidate.memory_candidate.provenance,
                     )
                 )
+            except AgentOpsError:
+                raise
             except Exception as exc:
                 raise MemoryError() from exc
         return AgentChatResponse(
@@ -289,7 +286,7 @@ def _flatten_exception(exc: BaseException) -> list[BaseException]:
 
 def _map_run_error(exc: BaseException) -> AgentOpsError | AgentChatResponse:
     for part in _flatten_exception(exc):
-        if isinstance(part, (RetrievalError, MemoryError, TimeoutError_)):
+        if isinstance(part, AgentOpsError):
             return part
         if isinstance(part, TimeoutError):
             return TimeoutError_()

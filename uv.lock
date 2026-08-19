@@ -1234,6 +1234,7 @@ dependencies = [
 agentops = [
     { name = "aiosqlite" },
     { name = "arize-phoenix-otel" },
+    { name = "faiss-cpu" },
     { name = "google-adk" },
     { name = "litellm" },
     { name = "openinference-instrumentation-google-adk" },
@@ -1262,6 +1263,7 @@ rag = [
 requires-dist = [
     { name = "aiosqlite", marker = "extra == 'agentops'", specifier = "==0.22.1" },
     { name = "arize-phoenix-otel", marker = "extra == 'agentops'", specifier = "==0.17.1" },
+    { name = "faiss-cpu", marker = "extra == 'agentops'", specifier = "==1.9.0" },
     { name = "faiss-cpu", marker = "extra == 'rag'", specifier = "==1.9.0" },
     { name = "fastapi", specifier = "==0.141.1" },
     { name = "google-adk", marker = "extra == 'agentops'", specifier = "==2.7.1" },

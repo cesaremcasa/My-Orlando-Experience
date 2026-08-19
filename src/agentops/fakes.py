@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncGenerator
 
-from src.agentops.schemas import ResponseCandidate, SafetyVerdict
+from src.agentops.schemas import MemoryCandidate, ResponseCandidate, SafetyVerdict
 from src.retrieve.contracts import RetrievedChunk
 
 
@@ -80,7 +80,10 @@ def _payload_for_request(
     return ResponseCandidate(
         response="Synthetic fixture: Magic Kingdom opens at 09:00 for this test context.",
         citation_ids=["cc0-fixture-001"],
-        memory_candidate={"content": "User asked about fixture park hours.", "provenance": "response"},
+        memory_candidate=MemoryCandidate(
+            content="User asked about fixture park hours.",
+            provenance="response",
+        ),
     ).model_dump()
 
 

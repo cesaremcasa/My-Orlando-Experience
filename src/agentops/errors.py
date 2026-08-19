@@ -39,3 +39,12 @@ class SafetyError(AgentOpsError):
 class TimeoutError_(AgentOpsError):
     def __init__(self) -> None:
         super().__init__("timeout", 504, "Agent timed out.")
+
+
+class ConfigurationError(AgentOpsError):
+    def __init__(self) -> None:
+        super().__init__(
+            "configuration",
+            500,
+            'AgentOps runtime requires extras. Install with: pip install -e ".[rag,agentops]"',
+        )

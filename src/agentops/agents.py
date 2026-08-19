@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncGenerator
 
-from src.agentops.errors import MemoryError, RetrievalError
+from src.agentops.errors import AgentOpsError, MemoryError, RetrievalError
 from src.agentops.schemas import ResponseCandidate, SafetyVerdict
 from src.agentops.tools import cite_chunk
 
@@ -26,6 +26,8 @@ def build_root_agent(*, retriever: Any, memory: Any, model: Any) -> Any:
             query = _user_text(ctx)
             try:
                 chunks = await asyncio.to_thread(self.retriever.retrieve, query, 3)
+            except AgentOpsError:
+                raise
             except Exception as exc:
                 raise RetrievalError() from exc
             serialized = [_chunk_dict(chunk) for chunk in chunks]
@@ -53,6 +55,8 @@ def build_root_agent(*, retriever: Any, memory: Any, model: Any) -> Any:
             user_id = str(ctx.session.state.get("beta_user") or "")
             try:
                 hits = await self.memory.search(user_id=user_id, query=query, top_k=3)
+            except AgentOpsError:
+                raise
             except Exception as exc:
                 raise MemoryError() from exc
             serialized = [

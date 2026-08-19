@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import Protocol
+from typing import Any, Protocol
 
 EMBED_DIM = 32
+PRODUCTION_MODEL_NAME = "all-MiniLM-L6-v2"
+PRODUCTION_EMBED_DIM = 384
 
 
 class Embedder(Protocol):
@@ -30,6 +32,38 @@ class FakeEmbedder:
             vector[index] += sign * (1.0 + digest[2] / 255.0)
         norm = math.sqrt(sum(value * value for value in vector)) or 1.0
         return [value / norm for value in vector]
+
+
+class SentenceTransformerEmbedder:
+    """Production embedder. Imports and model load happen on first embed()."""
+
+    dim = PRODUCTION_EMBED_DIM
+
+    def __init__(self, model_name: str = PRODUCTION_MODEL_NAME) -> None:
+        self.model_name = model_name
+        self._model: Any = None
+
+    def embed(self, text: str) -> list[float]:
+        vector = self._load().encode(
+            [text],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )[0]
+        return [float(value) for value in vector.tolist()]
+
+    def _load(self) -> Any:
+        if self._model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+            except Exception as exc:
+                from src.agentops.errors import ConfigurationError
+
+                raise ConfigurationError() from exc
+            self._model = SentenceTransformer(self.model_name)
+            dimension = getattr(self._model, "get_sentence_embedding_dimension", lambda: self.dim)()
+            if dimension:
+                self.dim = int(dimension)
+        return self._model
 
 
 def cosine(left: list[float], right: list[float]) -> float:

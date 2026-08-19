@@ -8,10 +8,11 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
-from src.agentops.memory.embedder import Embedder, FakeEmbedder, cosine
-from src.agentops.settings import data_dir, memory_backend
+from src.agentops.errors import ConfigurationError
+from src.agentops.memory.embedder import Embedder, SentenceTransformerEmbedder, cosine
+from src.agentops.settings import data_dir
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ class MemoryStore(Protocol):
 
 
 class LocalMemoryStore:
-    """SQLite metadata/content + optional FAISS similarity; fake embedder in CI."""
+    """SQLite is authoritative. FAISS IndexFlatIP is rebuilt in memory per search."""
 
     def __init__(
         self,
@@ -59,11 +60,8 @@ class LocalMemoryStore:
             raise ValueError("memory storage must stay under the AgentOps data directory")
         self.root.mkdir(parents=True, exist_ok=True)
         self.db_path = self.root / "memory.sqlite"
-        self.index_path = self.root / "memory.faiss"
-        self.embedder = embedder or FakeEmbedder()
-        self.use_faiss = bool(use_faiss) if use_faiss is not None else (
-            memory_backend() == "local" and _faiss_available()
-        )
+        self.embedder = embedder if embedder is not None else SentenceTransformerEmbedder()
+        self.use_faiss = True if use_faiss is None else bool(use_faiss)
         self._init_db()
 
     def _init_db(self) -> None:
@@ -141,8 +139,6 @@ class LocalMemoryStore:
                 ),
             )
             conn.commit()
-        if self.use_faiss:
-            self._rebuild_faiss()
         return memory_id
 
     async def search(self, *, user_id: str, query: str, top_k: int = 3) -> list[MemoryRecord]:
@@ -155,7 +151,7 @@ class LocalMemoryStore:
         if not rows:
             return []
         if self.use_faiss:
-            scored = self._search_faiss(user_id, query_vec, rows, top_k)
+            scored = self._search_faiss(query_vec, rows, top_k)
         else:
             scored = []
             for row in rows:
@@ -193,8 +189,6 @@ class LocalMemoryStore:
             )
             conn.commit()
             changed = cursor.rowcount
-        if self.use_faiss:
-            self._rebuild_faiss()
         return int(changed)
 
     async def purge_expired(self, now: float | None = None) -> int:
@@ -212,8 +206,6 @@ class LocalMemoryStore:
             )
             conn.commit()
             changed = cursor.rowcount
-        if self.use_faiss:
-            self._rebuild_faiss()
         return int(changed)
 
     def _active_rows(self, user_id: str, now: float) -> list[dict]:
@@ -232,24 +224,19 @@ class LocalMemoryStore:
 
     def _search_faiss(
         self,
-        user_id: str,
         query_vec: list[float],
         rows: list[dict],
         top_k: int,
     ) -> list[tuple[float, dict]]:
-        import numpy as np
-
-        import faiss
-
+        np, faiss = _load_faiss()
         matrix = np.asarray(
             [json.loads(row["embedding"]) for row in rows], dtype="float32"
         )
-        index = faiss.IndexFlatIP(matrix.shape[1])
+        index = faiss.IndexFlatIP(int(matrix.shape[1]))
         index.add(matrix)
         scores, indices = index.search(
             np.asarray([query_vec], dtype="float32"), min(top_k, len(rows))
         )
-        del user_id
         out: list[tuple[float, dict]] = []
         for score, idx in zip(scores[0], indices[0]):
             if int(idx) < 0:
@@ -257,18 +244,15 @@ class LocalMemoryStore:
             out.append((float(score), rows[int(idx)]))
         return out
 
-    def _rebuild_faiss(self) -> None:
-        # Production local mode rebuilds from SQLite so the index stays user-safe.
-        # Search still filters by user_id before scoring.
-        return
 
-
-def _faiss_available() -> bool:
+def _load_faiss() -> tuple[Any, Any]:
     try:
-        import faiss  # noqa: F401
-    except Exception:
-        return False
-    return True
+        import numpy as np
+
+        import faiss
+    except Exception as exc:
+        raise ConfigurationError() from exc
+    return np, faiss
 
 
 def _is_under_data_dir(path: Path) -> bool:
