@@ -1,4 +1,4 @@
-# Orlando Experience RAG Backend (v0.3.0)
+# Orlando Experience RAG Backend (v0.4.0)
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Framework](https://img.shields.io/badge/Framework-FastAPI%20%7C%20Uvicorn-green)
@@ -26,7 +26,7 @@ The system defines all essential layers required in a modern RAG backend:
 
 ---
 
-## Current Capabilities (v0.3.0)
+## Current Capabilities (v0.4.0)
 
 ### FastAPI Interface
 - **Endpoint:** `POST /query`
@@ -209,7 +209,16 @@ python src/respond/generate_response.py "What time does Magic Kingdom open?"
 
 ## Current Status (v0.2.0-alpha)
 
-This repository is in **v0.3.0 grounded retrieval baseline**.
+This repository is **v0.4.0 AgentOps local evidence**. GCP is **NOT PROVISIONED / APPROVAL REQUIRED**. See `docs/` and `uv run python scripts/gcp_preflight.py`.
+
+Local container (fake runtime, no model download):
+
+```bash
+docker compose up --build api
+curl -s http://localhost:8080/health
+```
+
+Optional Phoenix: `docker compose --profile phoenix up`.
 
 | Subsystem | Status |
 |-----------|--------|
