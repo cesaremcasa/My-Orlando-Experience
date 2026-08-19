@@ -41,8 +41,11 @@ The system defines all essential layers required in a modern RAG backend:
   `ORLANDO_QUERY_TIMEOUT_SECONDS` (default `30`) and
   `ORLANDO_QUERY_MAX_CONCURRENCY` (default `8`)
 - Optional AgentOps beta: `POST /agent/chat` and `GET /agent/health` with
-  local memory and a Google ADK sequential/parallel graph. CI uses a
-  deterministic fake; real Grok is a manual canary only.
+  local SQLite memory, in-memory FAISS similarity, and a Google ADK
+  sequential/parallel graph. Production AgentOps requires
+  `pip install -e ".[rag,agentops]"`. Tests use a deterministic fake
+  embedder; real Grok is a manual canary only. FAISS indexes are rebuilt
+  per search from user-filtered SQLite rows and are not persisted.
 
 ### Retrieval System (ContextFusionEngine)
 - Loads FAISS-CPU indexes lazily on the first query
@@ -130,6 +133,10 @@ source venv/bin/activate
 
 # 2. Install the locked baseline (unit/dev path; RAG extras remain optional)
 uv sync --frozen --extra dev
+
+# AgentOps runtime (ADK + FAISS + SentenceTransformer embedder)
+pip install -e ".[rag,agentops]"
+# or: uv sync --frozen --extra rag --extra agentops --extra dev
 
 # 3. Configuration
 cp .env.example .env

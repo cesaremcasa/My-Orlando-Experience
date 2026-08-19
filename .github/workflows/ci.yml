@@ -24,7 +24,7 @@ jobs:
       - run: uv run pytest -q
       - run: uv run python scripts/fake_quickstart.py
       - run: uv run ruff check src tests scripts
-      - run: uv run mypy src tests --ignore-missing-imports --follow-imports=skip
+      - run: uv run mypy src
       - run: |
           uv export --frozen --all-extras --no-emit-project --format requirements.txt --no-hashes --output-file "$RUNNER_TEMP/requirements.lock.txt"
           uv run pip-audit -r "$RUNNER_TEMP/requirements.lock.txt" --no-deps --disable-pip || echo "::warning::locked dependency advisories recorded"
