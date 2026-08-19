@@ -53,3 +53,8 @@ class ConfigurationError(AgentOpsError):
 class FeedbackError(AgentOpsError):
     def __init__(self) -> None:
         super().__init__("feedback", 500, "Feedback operation failed.")
+
+
+class VertexNotProvisioned(AgentOpsError):
+    def __init__(self) -> None:
+        super().__init__("vertex", 503, "Vertex backend is not provisioned.")

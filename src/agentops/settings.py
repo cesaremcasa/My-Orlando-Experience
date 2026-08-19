@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TypedDict
 
 XAI_DEFAULT_MODEL = "grok-4.20-0309-non-reasoning"
 DEFAULT_DATA_DIR = "./.agentops"
 DEFAULT_MEMORY_BACKEND = "local"
+DEFAULT_EVAL_BACKEND = "local"
+DEFAULT_GCP_LOCATION = "us-central1"
 DEFAULT_AGENT_TIMEOUT_SECONDS = 30.0
 DEFAULT_AGENT_MAX_CONCURRENCY = 8
 ABSTENTION_RESPONSE = "I don't have enough verified context to answer that reliably."
@@ -22,7 +25,45 @@ def data_dir() -> Path:
 
 
 def memory_backend() -> str:
-    return os.getenv("ORLANDO_MEMORY_BACKEND") or DEFAULT_MEMORY_BACKEND
+    value = (os.getenv("ORLANDO_MEMORY_BACKEND") or DEFAULT_MEMORY_BACKEND).strip().lower()
+    return value if value in {"local", "vertex"} else DEFAULT_MEMORY_BACKEND
+
+
+def eval_backend() -> str:
+    value = (os.getenv("ORLANDO_EVAL_BACKEND") or DEFAULT_EVAL_BACKEND).strip().lower()
+    return value if value in {"local", "vertex"} else DEFAULT_EVAL_BACKEND
+
+
+class VertexConfig(TypedDict):
+    project: str
+    location: str
+    engine_id: str
+    complete: bool
+    selected: bool
+    issues: list[str]
+
+
+def vertex_config() -> VertexConfig:
+    project = (os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip()
+    location = (os.getenv("GOOGLE_CLOUD_LOCATION") or DEFAULT_GCP_LOCATION).strip()
+    engine_id = (os.getenv("GOOGLE_CLOUD_AGENT_ENGINE_ID") or "").strip()
+    issues: list[str] = []
+    selected = memory_backend() == "vertex" or eval_backend() == "vertex"
+    if selected and not project:
+        issues.append("GOOGLE_CLOUD_PROJECT is not set")
+    if selected and not engine_id:
+        issues.append("GOOGLE_CLOUD_AGENT_ENGINE_ID is not set")
+    complete = bool(project and location and engine_id)
+    if selected and complete:
+        issues.append("Vertex Memory Bank is Pre-GA and is not provisioned")
+    return {
+        "project": project,
+        "location": location,
+        "engine_id": engine_id,
+        "complete": complete,
+        "selected": selected,
+        "issues": issues,
+    }
 
 
 def agent_timeout_seconds() -> float:
