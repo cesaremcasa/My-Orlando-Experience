@@ -9,9 +9,12 @@ from contextlib import asynccontextmanager
 from typing import List, Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from src.agentops.errors import AgentOpsError
+from src.agentops.schemas import AgentChatRequest, AgentChatResponse, AgentHealthResponse
+from src.agentops.settings import BETA_USER_HEADER
 from src.respond.providers import ChatProvider, XAIProvider
 from src.retrieve.contracts import RetrievedChunk, Retriever
 from src.validate.grounding_check import check_grounding
@@ -24,9 +27,12 @@ fusion_engine: Retriever | None = None
 provider: ChatProvider = XAIProvider()
 _engine_init_lock = threading.Lock()
 _query_semaphore: asyncio.Semaphore | None = None
+_agent_semaphore: asyncio.Semaphore | None = None
 
 QUERY_TIMEOUT_SECONDS = float(os.getenv("ORLANDO_QUERY_TIMEOUT_SECONDS", "30"))
 QUERY_MAX_CONCURRENCY = int(os.getenv("ORLANDO_QUERY_MAX_CONCURRENCY", "8"))
+AGENT_TIMEOUT_SECONDS = float(os.getenv("ORLANDO_AGENT_TIMEOUT_SECONDS", "30"))
+AGENT_MAX_CONCURRENCY = int(os.getenv("ORLANDO_AGENT_MAX_CONCURRENCY", "8"))
 GROUNDING_MIN_SCORE = float(os.getenv("ORLANDO_GROUNDING_MIN_SCORE", "0.15"))
 ABSTENTION_RESPONSE = "I don't have enough verified context to answer that reliably."
 
@@ -47,6 +53,21 @@ def get_query_semaphore() -> asyncio.Semaphore:
     return _query_semaphore
 
 
+def reset_agent_semaphore(max_concurrency: int | None = None) -> asyncio.Semaphore:
+    global _agent_semaphore
+    limit = AGENT_MAX_CONCURRENCY if max_concurrency is None else max_concurrency
+    _agent_semaphore = asyncio.Semaphore(limit)
+    return _agent_semaphore
+
+
+def get_agent_semaphore() -> asyncio.Semaphore:
+    global _agent_semaphore
+    if _agent_semaphore is None:
+        reset_agent_semaphore()
+    assert _agent_semaphore is not None
+    return _agent_semaphore
+
+
 def get_fusion_engine() -> Retriever:
     global fusion_engine
     if fusion_engine is None:
@@ -60,11 +81,13 @@ def get_fusion_engine() -> Retriever:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Bind the query limiter only. Retrieval and providers stay lazy."""
+    """Bind query/agent limiters only. Retrieval, ADK, and providers stay lazy."""
     reset_query_semaphore()
+    reset_agent_semaphore()
     yield
-    global _query_semaphore
+    global _query_semaphore, _agent_semaphore
     _query_semaphore = None
+    _agent_semaphore = None
 
 
 app = FastAPI(title="Orlando RAG API", version="0.3.0", lifespan=lifespan)
@@ -211,3 +234,45 @@ async def query_endpoint(request: QueryRequest):
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "engine_ready": fusion_engine is not None}
+
+
+@app.get("/agent/health", response_model=AgentHealthResponse)
+def agent_health() -> AgentHealthResponse:
+    from src.agentops.runtime import agent_health_payload
+
+    return AgentHealthResponse.model_validate(agent_health_payload())
+
+
+@app.post("/agent/chat", response_model=AgentChatResponse)
+async def agent_chat(
+    request: AgentChatRequest,
+    x_beta_user: str = Header(..., alias=BETA_USER_HEADER),
+) -> AgentChatResponse:
+    user_id = x_beta_user.strip()
+    if not user_id or len(user_id) > 128:
+        raise HTTPException(status_code=400, detail="Invalid beta user.")
+    start_time = time.time()
+    try:
+        async with asyncio.timeout(AGENT_TIMEOUT_SECONDS):
+            async with get_agent_semaphore():
+                from src.agentops.runtime import get_runtime
+
+                runtime = get_runtime()
+                if runtime.retriever is None:
+                    runtime.retriever = fusion_engine or get_fusion_engine()
+                result = await runtime.chat(
+                    user_id=user_id,
+                    session_id=request.session_id,
+                    message=request.message,
+                    remember=request.remember,
+                )
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Agent timed out.") from None
+    except AgentOpsError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.detail) from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="Response provider unavailable") from None
+    result.latency_ms = round((time.time() - start_time) * 1000, 2)
+    return result

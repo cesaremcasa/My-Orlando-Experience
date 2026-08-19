@@ -40,6 +40,9 @@ The system defines all essential layers required in a modern RAG backend:
 - Runs retrieval and provider generation off the event loop with
   `ORLANDO_QUERY_TIMEOUT_SECONDS` (default `30`) and
   `ORLANDO_QUERY_MAX_CONCURRENCY` (default `8`)
+- Optional AgentOps beta: `POST /agent/chat` and `GET /agent/health` with
+  local memory and a Google ADK sequential/parallel graph. CI uses a
+  deterministic fake; real Grok is a manual canary only.
 
 ### Retrieval System (ContextFusionEngine)
 - Loads FAISS-CPU indexes lazily on the first query
