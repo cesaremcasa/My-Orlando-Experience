@@ -232,12 +232,18 @@ class AgentRuntime:
 
 def agent_health_payload() -> dict[str, Any]:
     cfg = vertex_config()
+    vertex_status = str(cfg["status"])
+    memory = getattr(_runtime, "memory", None) if _runtime is not None else None
+    client = getattr(memory, "_client", None)
+    if client is not None:
+        vertex_status = "fake_client"
     return {
         "status": "healthy",
         "agent_ready": _ready,
         "memory_backend": memory_backend(),
         "eval_backend": eval_backend(),
-        "vertex_ready": False,
+        "vertex_status": vertex_status,
+        "vertex_ready": vertex_status == "fake_client",
         "vertex_issues": list(cfg["issues"]),
     }
 

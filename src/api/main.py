@@ -119,7 +119,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _agent_semaphore = None
 
 
-app = FastAPI(title="Orlando RAG API", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Orlando RAG API", version="0.4.1", lifespan=lifespan)
 
 
 # --- Request/Response Models ---

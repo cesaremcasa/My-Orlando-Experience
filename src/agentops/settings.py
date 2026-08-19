@@ -40,28 +40,50 @@ class VertexConfig(TypedDict):
     engine_id: str
     complete: bool
     selected: bool
+    status: str
     issues: list[str]
 
 
 def vertex_config() -> VertexConfig:
+    import importlib.util
+
     project = (os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip()
     location = (os.getenv("GOOGLE_CLOUD_LOCATION") or DEFAULT_GCP_LOCATION).strip()
     engine_id = (os.getenv("GOOGLE_CLOUD_AGENT_ENGINE_ID") or "").strip()
     issues: list[str] = []
     selected = memory_backend() == "vertex" or eval_backend() == "vertex"
-    if selected and not project:
+    if not selected:
+        return {
+            "project": project,
+            "location": location,
+            "engine_id": engine_id,
+            "complete": False,
+            "selected": False,
+            "status": "not_selected",
+            "issues": [],
+        }
+    if not project:
         issues.append("GOOGLE_CLOUD_PROJECT is not set")
-    if selected and not engine_id:
+    if not engine_id:
         issues.append("GOOGLE_CLOUD_AGENT_ENGINE_ID is not set")
-    complete = bool(project and location and engine_id)
-    if selected and complete:
+    if importlib.util.find_spec("google.cloud.aiplatform") is None:
+        issues.append("gcp extra is not installed")
+    env_complete = bool(project and location and engine_id)
+    if issues:
+        status = "incomplete"
+        complete = False
+    else:
+        status = "unprovisioned"
+        complete = env_complete
         issues.append("Vertex Memory Bank is Pre-GA and is not provisioned")
+        issues.append("real SDK-backed Vertex client requires a separate approval-gated PR")
     return {
         "project": project,
         "location": location,
         "engine_id": engine_id,
         "complete": complete,
-        "selected": selected,
+        "selected": True,
+        "status": status,
         "issues": issues,
     }
 

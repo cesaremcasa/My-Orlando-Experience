@@ -5,4 +5,4 @@
 - Default `ORLANDO_TRACE_CONTENT=0`. Spans may hold IDs, hashes, sizes, scores, status, and latency — not prompts, responses, retrieved text, memory content, feedback reasons, or keys.
 - Memory is isolated by `X-Beta-User`. SQLite is authoritative. FAISS is rebuilt from user-filtered rows.
 - HTTP failures are sanitized. Feedback stores no real PII; only synthetic beta identities.
-- Vertex Memory Bank is Pre-GA and not provisioned.
+- Vertex Memory Bank is Pre-GA and not provisioned. No production add/search/delete against Vertex is implemented.

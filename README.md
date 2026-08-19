@@ -1,13 +1,11 @@
-# Orlando Experience RAG Backend (v0.4.0)
+# Orlando Experience RAG Backend (v0.4.1)
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Framework](https://img.shields.io/badge/Framework-FastAPI%20%7C%20Uvicorn-green)
 ![Architecture](https://img.shields.io/badge/Architecture-Decoupled%20RAG%20%7C%20Context%20Fusion-orange)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-A modular, production-grade backend for a Travel Retrieval-Augmented Generation (RAG) system built on Orlando theme park visitor data and operational insights.
-
-This project demonstrates system design principles, correct engineering structure, and clean subsystem boundaries. It evolved from a CLI prototype into a RESTful API service capable of real-time retrieval, automated validation, and response generation.
+A portfolio-grade reference implementation of a grounded Orlando retrieval service and a beta AgentOps path. It is local-first evidence, not a provisioned production deployment.
 
 ---
 
@@ -17,16 +15,16 @@ The system defines all essential layers required in a modern RAG backend:
 
 - **FastAPI Service** (`src/api/main.py`) for request handling
 - **ContextFusionEngine** (`src/retrieve/context_fusion.py`) for optimized retrieval
-- **Guardrails Layer** (`src/validate/grounding_check.py`) for hallucination prevention
-- **Automated Testing** (`tests/evaluation/`) for regression checks
-- **Local-First Architecture**: CPU-optimized (FAISS-CPU + SentenceTransformers)
-- **Observability**: Structured JSON logging with latency and grounding metrics
+- **Guardrails Layer** (`src/validate/grounding_check.py`): lexical grounding heuristic, not a factuality guarantee
+- **Automated Testing** (`tests/`) for the fake-provider path and optional FAISS/model assets
+- **Local-First Architecture**: FAISS-CPU + SentenceTransformers, loaded lazily
+- **Observability**: optional OpenTelemetry spans (`ORLANDO_TRACE_CONTENT=0` by default)
 
-**Key Differentiator:** The system employs a decoupled RAG architecture designed to solve critical production challenges: **Context Contamination** and **Stale Knowledge**. Retrieval and validation logic are isolated into dedicated services, ensuring that the backend remains performant (~20ms local retrieval) and verifiable, independent of the LLM provider. This separation enables real-time knowledge updates without model retraining and prevents context drift across retrieval cycles.
+Retrieval and validation are isolated services. That is a design choice for this reference implementation, not a measured production SLO or a claim that context drift cannot occur.
 
 ---
 
-## Current Capabilities (v0.4.0)
+## Current Capabilities (v0.4.1)
 
 ### FastAPI Interface
 - **Endpoint:** `POST /query`
@@ -40,17 +38,17 @@ The system defines all essential layers required in a modern RAG backend:
 - Runs retrieval and provider generation off the event loop with
   `ORLANDO_QUERY_TIMEOUT_SECONDS` (default `30`) and
   `ORLANDO_QUERY_MAX_CONCURRENCY` (default `8`)
-- Optional AgentOps beta: `POST /agent/chat` and `GET /agent/health` with
+- Beta AgentOps path: `POST /agent/chat` and `GET /agent/health` with
   local SQLite memory, in-memory FAISS similarity, and a Google ADK
-  sequential/parallel graph. Production AgentOps requires
-  `pip install -e ".[rag,agentops]"`. Tests use a deterministic fake
-  embedder; real Grok is a manual canary only. FAISS indexes are rebuilt
-  per search from user-filtered SQLite rows and are not persisted.
-  Additive beta surfaces: `POST /feedback`, Phoenix/OpenTelemetry spans
-  when `PHOENIX_COLLECTOR_ENDPOINT` or `ORLANDO_TRACE_EXPORTER=memory` is
-  set, and `python scripts/eval_agentops.py` for the 20-case CC0 harness.
+  sequential/parallel graph. Runtime extras: `pip install ".[agentops]"`
+  (includes FAISS and the SentenceTransformer *package*). Tests use a
+  deterministic fake embedder. Real Grok canary is pending. FAISS indexes
+  are rebuilt per search from user-filtered SQLite rows and are not
+  persisted. Additive surfaces: `POST /feedback`, optional OpenTelemetry
+  spans, and `orlando-agentops-eval` for the 20-case CC0 harness.
   Default `ORLANDO_TRACE_CONTENT=0` never records prompts, responses,
   retrieved text, memory content, feedback reasons, or API keys.
+  GCP is not provisioned. Vertex is a fail-closed unprovisioned scaffold.
 
 ### Retrieval System (ContextFusionEngine)
 - Loads FAISS-CPU indexes lazily on the first query
@@ -61,12 +59,12 @@ The system defines all essential layers required in a modern RAG backend:
 
 ### Validation Layer (Guardrails)
 - Implements Jaccard Index logic with Time Normalization (e.g., matching `9h00` to `9:00 AM`)
-- Calculates `grounding_score` (0.0 to 1.0) to signal confidence and act as a **Hallucination Prevention** mechanism
-- Serves as a defensive measure against hallucination by checking entity overlap between context and response, ensuring factual consistency
+- Calculates `grounding_score` (0.0 to 1.0) as a lexical/entity-overlap heuristic
+- This is not a factuality guarantee and is not independent groundedness judging
 
 ### Testing & Quality Assurance
 - **Automated Integration Tests**: `test_core_facts.py` validates retrieval using Entity Extraction (Regex-based). The use of Entity Extraction for QA is a robust pattern chosen over fragile Exact-Match tests, ensuring that only the **Functional Correctness** of the facts is validated, independent of LLM phrasing variations.
-- **Performance Telemetry**: Every request logs local latency vs. total latency
+- Request responses include `latency_ms`. There is no production SLO or cold-start benchmark yet.
 
 ### Configuration
 - Central `.env` file (never committed)
@@ -81,7 +79,7 @@ The system is designed as a 3-layer pipeline, optimized for CPU-bound environmen
 ### 1. Retrieval Layer (`src/retrieve/`)
 - **Technology**: FAISS IndexFlatL2 + SentenceTransformers
 - **Strategy**: Local inference for embeddings to minimize network overhead
-- **Performance**: ~20ms average retrieval latency (cold start)
+- **Performance**: no production SLO or cold-start benchmark yet; local fake-path latency is wall-clock only
 
 ### 2. Orchestration Layer (`src/api/`)
 - **Technology**: FastAPI with Uvicorn
@@ -139,9 +137,13 @@ source venv/bin/activate
 # 2. Install the locked baseline (unit/dev path; RAG extras remain optional)
 uv sync --frozen --extra dev
 
-# AgentOps runtime (ADK + FAISS + SentenceTransformer embedder)
-pip install -e ".[rag,agentops]"
-# or: uv sync --frozen --extra rag --extra agentops --extra dev
+# AgentOps runtime (ADK + FAISS + SentenceTransformer package; model stays lazy)
+pip install ".[agentops]"
+# or from a built wheel:
+# pip install dist/my_orlando_experience-*.whl[agentops]
+# orlando-agentops-quickstart
+# orlando-agentops-eval --seed 42 --out /tmp/orlando-eval
+# orlando-agentops-gcp-preflight
 
 # 3. Configuration
 cp .env.example .env
@@ -157,6 +159,7 @@ deterministic CC0 fixture quickstart:
 
 ```bash
 uv run python scripts/fake_quickstart.py
+# installed wheel: orlando-agentops-quickstart
 ```
 
 The optional Grok/xAI provider canary uses only that synthetic context and is
@@ -167,14 +170,14 @@ XAI_API_KEY=... uv run python scripts/provider_canary.py
 ```
 
 It prints only a response digest and citation count. With no key it remains
-pending. Grounding is lexical/entity-overlap validation, not an independent
-truth guarantee; weak or empty evidence is returned as `abstained`.
+pending. Real Grok canary pending. Grounding is a lexical heuristic, not a
+factuality guarantee; weak or empty evidence is returned as `abstained`.
 
 ---
 
 ## Running the System
 
-### Option A: Production API (Recommended)
+### Option A: Local API
 Start the Uvicorn server:
 
 ```bash
@@ -207,26 +210,30 @@ python src/respond/generate_response.py "What time does Magic Kingdom open?"
 
 ---
 
-## Current Status (v0.2.0-alpha)
+## Current Status (v0.4.1)
 
-This repository is **v0.4.0 AgentOps local evidence**. GCP is **NOT PROVISIONED / APPROVAL REQUIRED**. See `docs/` and `uv run python scripts/gcp_preflight.py`.
+This repository is a **portfolio-grade reference implementation** of a beta AgentOps path. GCP is **NOT PROVISIONED / APPROVAL REQUIRED**. See `docs/` and `orlando-agentops-gcp-preflight`.
 
-Local container (fake runtime, no model download):
+| Evidence | Status |
+|-----------|--------|
+| Tested fake provider | yes |
+| Real Grok provider configured | yes, canary pending |
+| In-memory OpenTelemetry exporter | tested |
+| Live Phoenix collector | not yet canaried |
+| Local FAISS | tested (FakeEmbedder in CI/container) |
+| SentenceTransformer package | present in `agentops` extra; model download/canary not run in CI |
+| Vertex fake client | tested |
+| Real Vertex service | not implemented or provisioned (fail-closed scaffold, Memory Bank Pre-GA) |
+| Default container | fake HTTP path + local FAISS/FakeEmbedder; does not prove Vertex or Grok |
+
+Local container (fake runtime, no model download during build):
 
 ```bash
 docker compose up --build api
 curl -s http://localhost:8080/health
 ```
 
-Optional Phoenix: `docker compose --profile phoenix up`.
-
-| Subsystem | Status |
-|-----------|--------|
-| **FastAPI Service** | Implemented (`/query`, `/health`) |
-| **ContextFusionEngine** | Implemented (20ms latency) |
-| **Validation (Guardrails)** | Implemented (Jaccard + Regex) |
-| **Automated Testing** | Implemented (Entity Extraction) |
-| **Frontend UI** | External (Decoupled) |
+Optional Phoenix: `docker compose --profile phoenix up`. Live Phoenix collector is not yet canaried.
 
 ---
 
