@@ -6,6 +6,7 @@ import pytest
 
 pytestmark = pytest.mark.integration
 faiss = pytest.importorskip("faiss", reason="FAISS integration assets are optional")
+pytest.importorskip("sentence_transformers", reason="SentenceTransformer assets are optional")
 import numpy as np
 from sentence_transformers import SentenceTransformer
 

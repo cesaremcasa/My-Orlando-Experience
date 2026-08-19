@@ -16,6 +16,7 @@ from src.agentops.fakes import FakeAgentLlm, FixtureRetriever
 from src.agentops.memory.embedder import FakeEmbedder
 from src.agentops.memory.store import LocalMemoryStore
 from src.agentops.runtime import AgentRuntime, reset_runtime
+from src.agentops.settings import xai_model
 from src.agentops.tools import cite_chunk
 from src.api import main
 from src.retrieve.contracts import RetrievedChunk
@@ -389,3 +390,218 @@ def test_cc0_fixture_still_synthetic():
     )
     assert "Disney" not in chunk.text
     assert chunk.source_id == "cc0-fixture-001"
+
+
+def test_agent_chat_requires_beta_user_and_bounds(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    _runtime(tmp_path)
+    client = TestClient(main.app)
+    missing = client.post("/agent/chat", json={"session_id": "s1", "message": "When does the fixture open?"})
+    assert missing.status_code == 422
+    blank = client.post(
+        "/agent/chat",
+        json={"session_id": "   ", "message": "When does the fixture open?"},
+        headers=HEADERS,
+    )
+    assert blank.status_code == 422
+    long_session = client.post(
+        "/agent/chat",
+        json={"session_id": "s" * 129, "message": "When does the fixture open?"},
+        headers=HEADERS,
+    )
+    assert long_session.status_code == 422
+    long_message = client.post(
+        "/agent/chat",
+        json={"session_id": "s1", "message": "m" * 2001},
+        headers=HEADERS,
+    )
+    assert long_message.status_code == 422
+    ok = client.post(
+        "/agent/chat",
+        json={"session_id": "s" * 128, "message": "When does the fixture open?"},
+        headers=HEADERS,
+    )
+    assert ok.status_code == 200
+
+
+def test_query_and_health_contracts_unchanged(tmp_path, monkeypatch):
+    from src.respond.providers import FakeProvider
+
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    _runtime(tmp_path)
+    monkeypatch.setattr(main, "provider", FakeProvider())
+    client = TestClient(main.app)
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json() == {"status": "healthy", "engine_ready": True}
+    query = client.post("/query", json={"question": "When does the fixture open?"})
+    assert query.status_code == 200
+    body = query.json()
+    assert {"response", "grounding_score", "latency_ms", "sources", "citations", "grounding_status"} <= set(body)
+
+
+def test_production_topology_uses_xai_litellm(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    memory = LocalMemoryStore(root=tmp_path, embedder=FakeEmbedder(), use_faiss=False)
+    runtime = reset_runtime(AgentRuntime(retriever=FixtureRetriever(), memory=memory))
+    runtime.ensure()
+    model_name = str(getattr(runtime.model, "model", ""))
+    assert model_name.startswith("xai/")
+    assert "gemini" not in model_name.lower()
+    assert xai_model() in model_name
+    from google.adk.models.lite_llm import LiteLlm
+
+    assert isinstance(runtime.model, LiteLlm)
+
+
+def test_production_runtime_selects_lazy_real_embedder(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    runtime = reset_runtime(AgentRuntime(retriever=FixtureRetriever(), fake_llm=FakeAgentLlm()))
+    runtime.ensure()
+    from src.agentops.memory.embedder import SentenceTransformerEmbedder
+
+    assert isinstance(runtime.memory.embedder, SentenceTransformerEmbedder)
+    assert runtime.memory.embedder._model is None
+    assert runtime.memory.use_faiss is True
+
+
+def test_memory_persists_across_store_instances(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    first = LocalMemoryStore(root=tmp_path, embedder=FakeEmbedder(), use_faiss=False)
+    memory_id = asyncio.run(
+        first.add(
+            user_id="alice",
+            session_id="shared",
+            content="alice remembers the synthetic park hours fixture",
+            provenance="response",
+        )
+    )
+    second = LocalMemoryStore(root=tmp_path, embedder=FakeEmbedder(), use_faiss=False)
+    hits = asyncio.run(second.search(user_id="alice", query="park hours"))
+    assert memory_id in [item.memory_id for item in hits]
+    assert not (tmp_path / "memory.faiss").exists()
+    assert (tmp_path / "memory.sqlite").exists()
+
+
+def test_faiss_similarity_with_fake_embedder_filters_users(tmp_path, monkeypatch):
+    pytest.importorskip("faiss")
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    store = LocalMemoryStore(root=tmp_path, embedder=FakeEmbedder(), use_faiss=True)
+    asyncio.run(
+        store.add(
+            user_id="alice",
+            session_id="s",
+            content="synthetic park hours fixture at Magic Kingdom",
+            provenance="response",
+        )
+    )
+    asyncio.run(
+        store.add(
+            user_id="alice",
+            session_id="s",
+            content="alice likes synthetic pretzels at a snack stand",
+            provenance="response",
+        )
+    )
+    asyncio.run(
+        store.add(
+            user_id="bob",
+            session_id="s",
+            content="synthetic park hours fixture at Magic Kingdom",
+            provenance="response",
+        )
+    )
+    alice = asyncio.run(store.search(user_id="alice", query="park hours fixture", top_k=2))
+    bob = asyncio.run(store.search(user_id="bob", query="park hours fixture", top_k=2))
+    assert alice
+    assert all(item.user_id == "alice" for item in alice)
+    assert "park" in alice[0].excerpt.lower()
+    assert all(item.user_id == "bob" for item in bob)
+    assert {item.memory_id for item in alice}.isdisjoint({item.memory_id for item in bob})
+    assert not (tmp_path / "memory.faiss").exists()
+
+
+def test_missing_runtime_extras_are_sanitized(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    from src.agentops.errors import ConfigurationError
+
+    class MissingExtrasMemory(LocalMemoryStore):
+        async def search(self, *, user_id: str, query: str, top_k: int = 3):
+            raise ConfigurationError()
+
+    memory = MissingExtrasMemory(root=tmp_path, embedder=FakeEmbedder(), use_faiss=False)
+    _runtime(tmp_path, memory=memory)
+    response = TestClient(main.app).post(
+        "/agent/chat",
+        json={"session_id": "s-extras", "message": "When does the fixture open?"},
+        headers=HEADERS,
+    )
+    assert response.status_code == 500
+    assert response.json() == {
+        "detail": 'AgentOps runtime requires extras. Install with: pip install -e ".[rag,agentops]"'
+    }
+    assert "ImportError" not in response.text
+    assert "Traceback" not in response.text
+
+
+def test_invalid_safety_schema_abstains(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    _runtime(tmp_path, fake_llm=FakeAgentLlm(safety={"nope": True}))
+    body = TestClient(main.app).post(
+        "/agent/chat",
+        json={"session_id": "s-safety-schema", "message": "When does the fixture open?", "remember": True},
+        headers=HEADERS,
+    ).json()
+    assert body["grounding_status"] == "abstained"
+
+
+def test_agent_concurrency_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    retriever = FixtureRetriever(delay_s=0.2)
+    _runtime(tmp_path, retriever=retriever)
+    monkeypatch.setattr(main, "AGENT_TIMEOUT_SECONDS", 30.0)
+    monkeypatch.setattr(main, "AGENT_MAX_CONCURRENCY", 1)
+
+    async def run() -> None:
+        async with _async_client() as client:
+            started = time.monotonic()
+            responses = await asyncio.gather(
+                client.post(
+                    "/agent/chat",
+                    json={"session_id": "s-a", "message": "When does the fixture open?"},
+                    headers={"X-Beta-User": "user-a"},
+                ),
+                client.post(
+                    "/agent/chat",
+                    json={"session_id": "s-b", "message": "When does the fixture open?"},
+                    headers={"X-Beta-User": "user-b"},
+                ),
+            )
+            elapsed = time.monotonic() - started
+        assert all(item.status_code == 200 for item in responses)
+        assert elapsed >= 0.35
+
+    asyncio.run(run())
+
+
+def test_agent_canary_redacts_output_and_is_pending_without_key():
+    source = (REPO_ROOT / "scripts" / "agent_canary.py").read_text(encoding="utf-8")
+    assert "response_sha256" in source
+    assert "response_chars" in source
+    assert "citation_ids" in source
+    assert "agent_path" in source
+    env = os.environ.copy()
+    env.pop("XAI_API_KEY", None)
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    completed = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "agent_canary.py")],
+        cwd=REPO_ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "PENDING" in completed.stdout
+    assert "Synthetic fixture" not in completed.stdout
+    assert "When does" not in completed.stdout
