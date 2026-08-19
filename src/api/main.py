@@ -1,40 +1,74 @@
+from __future__ import annotations
+
+import asyncio
 import os
-import sys
+import threading
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import List, Literal, Optional
 
-# Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-# Import Core Modules
-from src.validate.grounding_check import check_grounding
-from src.retrieve.contracts import RetrievedChunk, Retriever
 from src.respond.providers import ChatProvider, XAIProvider
-from dotenv import load_dotenv
+from src.retrieve.contracts import RetrievedChunk, Retriever
+from src.validate.grounding_check import check_grounding
 
 # Load Env
 load_dotenv()
 
-# --- Lazy dependencies ---
+# --- Lazy dependencies; no FAISS, Grok, Phoenix, or GCP work at import ---
 fusion_engine: Retriever | None = None
 provider: ChatProvider = XAIProvider()
+_engine_init_lock = threading.Lock()
+_query_semaphore: asyncio.Semaphore | None = None
+
+QUERY_TIMEOUT_SECONDS = float(os.getenv("ORLANDO_QUERY_TIMEOUT_SECONDS", "30"))
+QUERY_MAX_CONCURRENCY = int(os.getenv("ORLANDO_QUERY_MAX_CONCURRENCY", "8"))
+GROUNDING_MIN_SCORE = float(os.getenv("ORLANDO_GROUNDING_MIN_SCORE", "0.15"))
+ABSTENTION_RESPONSE = "I don't have enough verified context to answer that reliably."
+
+
+def reset_query_semaphore(max_concurrency: int | None = None) -> asyncio.Semaphore:
+    """Create the query semaphore; used by lifespan and tests."""
+    global _query_semaphore
+    limit = QUERY_MAX_CONCURRENCY if max_concurrency is None else max_concurrency
+    _query_semaphore = asyncio.Semaphore(limit)
+    return _query_semaphore
+
+
+def get_query_semaphore() -> asyncio.Semaphore:
+    global _query_semaphore
+    if _query_semaphore is None:
+        reset_query_semaphore()
+    assert _query_semaphore is not None
+    return _query_semaphore
 
 
 def get_fusion_engine() -> Retriever:
     global fusion_engine
     if fusion_engine is None:
-        from src.retrieve.context_fusion import ContextFusionEngine
+        with _engine_init_lock:
+            if fusion_engine is None:
+                from src.retrieve.context_fusion import ContextFusionEngine
 
-        fusion_engine = ContextFusionEngine()
+                fusion_engine = ContextFusionEngine()
     return fusion_engine
 
-# FastAPI App
-app = FastAPI(title="Orlando RAG API", version="0.3.0")
-GROUNDING_MIN_SCORE = float(os.getenv("ORLANDO_GROUNDING_MIN_SCORE", "0.15"))
-ABSTENTION_RESPONSE = "I don't have enough verified context to answer that reliably."
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Bind the query limiter only. Retrieval and providers stay lazy."""
+    reset_query_semaphore()
+    yield
+    global _query_semaphore
+    _query_semaphore = None
+
+
+app = FastAPI(title="Orlando RAG API", version="0.3.0", lifespan=lifespan)
+
 
 # --- Request/Response Models ---
 class QueryRequest(BaseModel):
@@ -93,28 +127,21 @@ def _format_sources(context_list: List[str]) -> List[str]:
             formatted.append("📌 Source Document")
     return formatted
 
-# --- Endpoint ---
-@app.post("/query", response_model=QueryResponse)
-def query_endpoint(request: QueryRequest):
-    """
-    Receives a question, retrieves context, generates an LLM response,
-    validates grounding, and returns the result.
-    """
-    start_time = time.time()
-    
+
+async def _execute_query(request: QueryRequest, start_time: float) -> QueryResponse:
     try:
-        engine = get_fusion_engine()
+        engine = await asyncio.to_thread(get_fusion_engine)
     except Exception:
         raise HTTPException(status_code=503, detail="Fusion Engine not initialized.")
-    
+
     # 1. Retrieve Context
     try:
-        retrieved = engine.retrieve(request.question, top_k=3)
+        retrieved = await asyncio.to_thread(engine.retrieve, request.question, 3)
         chunks = [item for item in retrieved if isinstance(item, RetrievedChunk)]
         context_list = [chunk.text for chunk in chunks]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
-    
+
     context_str = "\n".join(text for text in context_list if text.strip())
     citations, sources = _citation_data(chunks)
     if not context_str:
@@ -126,16 +153,20 @@ def query_endpoint(request: QueryRequest):
             citations=[],
             grounding_status="abstained",
         )
-    
+
     # 2. Generate Response through the lazy provider abstraction
     try:
-        response_text = provider.generate(question=request.question, context=context_str)
+        response_text = await asyncio.to_thread(
+            provider.generate,
+            question=request.question,
+            context=context_str,
+        )
     except Exception:
         raise HTTPException(status_code=502, detail="Response provider unavailable")
-        
+
     # 3. Validate Grounding
     score = check_grounding(request.question, context_list, response_text)
-    
+
     # 4. Format Sources for UI
     if score < GROUNDING_MIN_SCORE:
         return QueryResponse(
@@ -146,10 +177,10 @@ def query_endpoint(request: QueryRequest):
             citations=[],
             grounding_status="abstained",
         )
-    
+
     # Calculate Latency
     latency_ms = (time.time() - start_time) * 1000
-    
+
     return QueryResponse(
         response=response_text,
         grounding_score=score,
@@ -158,6 +189,23 @@ def query_endpoint(request: QueryRequest):
         citations=citations,
         grounding_status="grounded",
     )
+
+
+# --- Endpoint ---
+@app.post("/query", response_model=QueryResponse)
+async def query_endpoint(request: QueryRequest):
+    """
+    Receives a question, retrieves context, generates an LLM response,
+    validates grounding, and returns the result.
+    """
+    start_time = time.time()
+    try:
+        async with asyncio.timeout(QUERY_TIMEOUT_SECONDS):
+            async with get_query_semaphore():
+                return await _execute_query(request, start_time)
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Query timed out.") from None
+
 
 # Health Check
 @app.get("/health")

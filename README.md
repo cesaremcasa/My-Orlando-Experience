@@ -37,6 +37,9 @@ The system defines all essential layers required in a modern RAG backend:
 - Uses `ORLANDO_GROUNDING_MIN_SCORE` (default `0.15`) as a simple grounding
   threshold; empty/weak evidence returns a fixed abstention response with no
   sources or citations
+- Runs retrieval and provider generation off the event loop with
+  `ORLANDO_QUERY_TIMEOUT_SECONDS` (default `30`) and
+  `ORLANDO_QUERY_MAX_CONCURRENCY` (default `8`)
 
 ### Retrieval System (ContextFusionEngine)
 - Loads FAISS-CPU indexes lazily on the first query
@@ -71,7 +74,7 @@ The system is designed as a 3-layer pipeline, optimized for CPU-bound environmen
 
 ### 2. Orchestration Layer (`src/api/`)
 - **Technology**: FastAPI with Uvicorn
-- **Design**: Global initialization of the `ContextFusionEngine` to ensure memory efficiency and avoid reloading models on every request
+- **Design**: Lazy `ContextFusionEngine` initialization on first query; `/query` is async and does not load FAISS, Grok, Phoenix, or GCP at import
 
 ### 3. Validation Layer (`src/validate/`)
 - **Logic**: Token-based intersection checks
