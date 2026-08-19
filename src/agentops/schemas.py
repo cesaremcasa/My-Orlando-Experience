@@ -60,3 +60,35 @@ class SafetyVerdict(BaseModel):
     reason: str = Field(min_length=1, max_length=240)
     schema_ok: bool = True
     grounded: bool = True
+
+
+class FeedbackRequest(BaseModel):
+    response_id: str = Field(min_length=1, max_length=128)
+    session_id: str = Field(min_length=1, max_length=128)
+    rating: int = Field(ge=1, le=5)
+    accepted: bool
+    reason: str | None = Field(default=None, max_length=500)
+
+    @field_validator("response_id", "session_id")
+    @classmethod
+    def _strip_ids(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("must not be blank")
+        return cleaned
+
+    @field_validator("reason")
+    @classmethod
+    def _strip_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class FeedbackResponse(BaseModel):
+    response_id: str
+    session_id: str
+    rating: int
+    accepted: bool
+    updated: bool

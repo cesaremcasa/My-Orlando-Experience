@@ -22,15 +22,25 @@ def build_root_agent(*, retriever: Any, memory: Any, model: Any) -> Any:
 
         async def _run_async_impl(self, ctx: Any) -> AsyncGenerator[Event, None]:
             import asyncio
+            import time
+
+            from src.agentops.tracing import start_span
 
             query = _user_text(ctx)
-            try:
-                chunks = await asyncio.to_thread(self.retriever.retrieve, query, 3)
-            except AgentOpsError:
-                raise
-            except Exception as exc:
-                raise RetrievalError() from exc
-            serialized = [_chunk_dict(chunk) for chunk in chunks]
+            started = time.perf_counter()
+            with start_span("agent.retrieval", {"agent": self.name}) as span:
+                try:
+                    chunks = await asyncio.to_thread(self.retriever.retrieve, query, 3)
+                except AgentOpsError:
+                    span.set_attribute("status", "error")
+                    raise
+                except Exception as exc:
+                    span.set_attribute("status", "error")
+                    raise RetrievalError() from exc
+                serialized = [_chunk_dict(chunk) for chunk in chunks]
+                span.set_attribute("chunk_count", len(serialized))
+                span.set_attribute("status", "ok")
+                span.set_attribute("latency_ms", round((time.perf_counter() - started) * 1000, 2))
             yield Event(
                 invocation_id=ctx.invocation_id,
                 author=self.name,
@@ -51,24 +61,35 @@ def build_root_agent(*, retriever: Any, memory: Any, model: Any) -> Any:
         memory: Any = None
 
         async def _run_async_impl(self, ctx: Any) -> AsyncGenerator[Event, None]:
+            import time
+
+            from src.agentops.tracing import start_span
+
             query = _user_text(ctx)
             user_id = str(ctx.session.state.get("beta_user") or "")
-            try:
-                hits = await self.memory.search(user_id=user_id, query=query, top_k=3)
-            except AgentOpsError:
-                raise
-            except Exception as exc:
-                raise MemoryError() from exc
-            serialized = [
-                {
-                    "memory_id": hit.memory_id,
-                    "content_hash": hit.content_hash,
-                    "provenance": hit.provenance,
-                    "score": hit.score,
-                    "excerpt": hit.excerpt,
-                }
-                for hit in hits
-            ]
+            started = time.perf_counter()
+            with start_span("agent.memory", {"agent": self.name}) as span:
+                try:
+                    hits = await self.memory.search(user_id=user_id, query=query, top_k=3)
+                except AgentOpsError:
+                    span.set_attribute("status", "error")
+                    raise
+                except Exception as exc:
+                    span.set_attribute("status", "error")
+                    raise MemoryError() from exc
+                serialized = [
+                    {
+                        "memory_id": hit.memory_id,
+                        "content_hash": hit.content_hash,
+                        "provenance": hit.provenance,
+                        "score": hit.score,
+                        "excerpt": hit.excerpt,
+                    }
+                    for hit in hits
+                ]
+                span.set_attribute("hit_count", len(serialized))
+                span.set_attribute("status", "ok")
+                span.set_attribute("latency_ms", round((time.perf_counter() - started) * 1000, 2))
             yield Event(
                 invocation_id=ctx.invocation_id,
                 author=self.name,
@@ -100,7 +121,25 @@ def build_root_agent(*, retriever: Any, memory: Any, model: Any) -> Any:
         description="Retrieve evidence and memory together.",
         sub_agents=[retrieval, memory_agent],
     )
-    response = LlmAgent(
+    class ResponseLlmAgent(LlmAgent):
+        async def _run_async_impl(self, ctx: Any) -> AsyncGenerator[Event, None]:
+            from src.agentops.tracing import start_span
+
+            with start_span("agent.llm", {"agent": self.name}) as span:
+                span.set_attribute("status", "ok")
+                async for event in super()._run_async_impl(ctx):
+                    yield event
+
+    class SafetyLlmAgent(LlmAgent):
+        async def _run_async_impl(self, ctx: Any) -> AsyncGenerator[Event, None]:
+            from src.agentops.tracing import start_span
+
+            with start_span("agent.safety", {"agent": self.name}) as span:
+                span.set_attribute("status", "ok")
+                async for event in super()._run_async_impl(ctx):
+                    yield event
+
+    response = ResponseLlmAgent(
         name="response_agent",
         description="Draft a grounded Orlando answer.",
         model=model,
@@ -118,7 +157,7 @@ def build_root_agent(*, retriever: Any, memory: Any, model: Any) -> Any:
             "If there is no evidence, return an empty citation_ids list."
         ),
     )
-    safety = LlmAgent(
+    safety = SafetyLlmAgent(
         name="safety_agent",
         description="Emit a strict SafetyVerdict.",
         model=model,

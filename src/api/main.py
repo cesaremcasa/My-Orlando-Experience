@@ -13,8 +13,14 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from src.agentops.errors import AgentOpsError
-from src.agentops.schemas import AgentChatRequest, AgentChatResponse, AgentHealthResponse
-from src.agentops.settings import BETA_USER_HEADER
+from src.agentops.schemas import (
+    AgentChatRequest,
+    AgentChatResponse,
+    AgentHealthResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+)
+from src.agentops.settings import BETA_USER_HEADER, beta_allowlist
 from src.respond.providers import ChatProvider, XAIProvider
 from src.retrieve.contracts import RetrievedChunk, Retriever
 from src.validate.grounding_check import check_grounding
@@ -276,3 +282,53 @@ async def agent_chat(
         raise HTTPException(status_code=502, detail="Response provider unavailable") from None
     result.latency_ms = round((time.time() - start_time) * 1000, 2)
     return result
+
+
+@app.post("/feedback", response_model=FeedbackResponse)
+async def feedback_endpoint(
+    request: FeedbackRequest,
+    x_beta_user: str = Header(..., alias=BETA_USER_HEADER),
+) -> FeedbackResponse:
+    user_id = x_beta_user.strip()
+    if not user_id or len(user_id) > 128:
+        raise HTTPException(status_code=400, detail="Invalid beta user.")
+    if user_id not in beta_allowlist():
+        raise HTTPException(status_code=403, detail="Beta user is not allowlisted.")
+    try:
+        from src.agentops.feedback import LocalFeedbackStore
+        from src.agentops.tracing import start_span
+
+        store = LocalFeedbackStore()
+        with start_span(
+            "agent.feedback",
+            {
+                "beta_user": user_id,
+                "response_id": request.response_id,
+                "session_id": request.session_id,
+                "rating": request.rating,
+                "accepted": request.accepted,
+            },
+        ) as span:
+            record = await store.submit(
+                beta_user=user_id,
+                response_id=request.response_id,
+                session_id=request.session_id,
+                rating=request.rating,
+                accepted=request.accepted,
+                reason=request.reason,
+            )
+            span.set_attribute("status", "ok")
+            span.set_attribute("updated", record.updated)
+    except AgentOpsError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.detail) from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Feedback operation failed.") from None
+    return FeedbackResponse(
+        response_id=record.response_id,
+        session_id=record.session_id,
+        rating=record.rating,
+        accepted=record.accepted,
+        updated=record.updated,
+    )
