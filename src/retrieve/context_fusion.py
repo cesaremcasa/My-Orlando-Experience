@@ -49,6 +49,7 @@ class ContextFusionEngine:
                     source_document=source,
                     chunk_id=doc.get("chunk_id", int(idx)),
                     score=float(distances[0][rank]),
+                    source_id=str(doc.get("source_id") or source),
                 )
             )
             

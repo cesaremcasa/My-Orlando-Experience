@@ -12,6 +12,7 @@ class RetrievedChunk:
     source_document: str
     chunk_id: int | str
     score: float
+    source_id: str | None = None
 
 
 class Retriever(Protocol):

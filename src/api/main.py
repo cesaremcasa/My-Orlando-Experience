@@ -1,13 +1,13 @@
 import os
 import sys
 import time
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Import Core Modules
 from src.validate.grounding_check import check_grounding
@@ -33,6 +33,8 @@ def get_fusion_engine() -> Retriever:
 
 # FastAPI App
 app = FastAPI(title="Orlando RAG API", version="0.3.0")
+GROUNDING_MIN_SCORE = float(os.getenv("ORLANDO_GROUNDING_MIN_SCORE", "0.15"))
+ABSTENTION_RESPONSE = "I don't have enough verified context to answer that reliably."
 
 # --- Request/Response Models ---
 class QueryRequest(BaseModel):
@@ -43,6 +45,34 @@ class QueryResponse(BaseModel):
     grounding_score: float
     latency_ms: float
     sources: Optional[List[str]] = None
+    citations: List[dict] = Field(default_factory=list)
+    grounding_status: Literal["grounded", "abstained"] = "grounded"
+
+
+def _citation_data(chunks: list[RetrievedChunk]) -> tuple[list[dict], list[str]]:
+    citations: list[dict] = []
+    sources: list[str] = []
+    seen_chunks: set[tuple[str, str]] = set()
+    for chunk in chunks:
+        document = str(chunk.source_document)
+        source_id = str(chunk.source_id or document)
+        chunk_id = str(chunk.chunk_id)
+        key = (source_id, chunk_id)
+        if key in seen_chunks:
+            continue
+        seen_chunks.add(key)
+        if source_id not in sources:
+            sources.append(source_id)
+        citations.append(
+            {
+                "document": document,
+                "source_id": source_id,
+                "chunk_id": chunk.chunk_id,
+                "excerpt": chunk.text[:280],
+                "score": float(chunk.score),
+            }
+        )
+    return citations, sources
 
 def _format_sources(context_list: List[str]) -> List[str]:
     """
@@ -80,23 +110,42 @@ def query_endpoint(request: QueryRequest):
     # 1. Retrieve Context
     try:
         retrieved = engine.retrieve(request.question, top_k=3)
-        context_list = [item.text if isinstance(item, RetrievedChunk) else str(item) for item in retrieved]
+        chunks = [item for item in retrieved if isinstance(item, RetrievedChunk)]
+        context_list = [chunk.text for chunk in chunks]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
     
-    context_str = "\n".join(context_list)
+    context_str = "\n".join(text for text in context_list if text.strip())
+    citations, sources = _citation_data(chunks)
+    if not context_str:
+        return QueryResponse(
+            response=ABSTENTION_RESPONSE,
+            grounding_score=0.0,
+            latency_ms=round((time.time() - start_time) * 1000, 2),
+            sources=[],
+            citations=[],
+            grounding_status="abstained",
+        )
     
     # 2. Generate Response through the lazy provider abstraction
     try:
         response_text = provider.generate(question=request.question, context=context_str)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM Generation failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Response provider unavailable")
         
     # 3. Validate Grounding
     score = check_grounding(request.question, context_list, response_text)
     
     # 4. Format Sources for UI
-    ui_sources = _format_sources(context_list)
+    if score < GROUNDING_MIN_SCORE:
+        return QueryResponse(
+            response=ABSTENTION_RESPONSE,
+            grounding_score=score,
+            latency_ms=round((time.time() - start_time) * 1000, 2),
+            sources=[],
+            citations=[],
+            grounding_status="abstained",
+        )
     
     # Calculate Latency
     latency_ms = (time.time() - start_time) * 1000
@@ -105,7 +154,9 @@ def query_endpoint(request: QueryRequest):
         response=response_text,
         grounding_score=score,
         latency_ms=round(latency_ms, 2),
-        sources=ui_sources
+        sources=sources,
+        citations=citations,
+        grounding_status="grounded",
     )
 
 # Health Check

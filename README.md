@@ -31,12 +31,19 @@ The system defines all essential layers required in a modern RAG backend:
 ### FastAPI Interface
 - **Endpoint:** `POST /query`
 - Accepts natural language queries via JSON
-- Returns structured responses including `response`, `grounding_score`, `latency_ms`, and `sources`
+- Returns the backward-compatible `response`, `grounding_score`, `latency_ms`,
+  and `sources` fields plus structured `citations` and
+  `grounding_status` (`grounded` or `abstained`)
+- Uses `ORLANDO_GROUNDING_MIN_SCORE` (default `0.15`) as a simple grounding
+  threshold; empty/weak evidence returns a fixed abstention response with no
+  sources or citations
 
 ### Retrieval System (ContextFusionEngine)
 - Loads FAISS-CPU indexes lazily on the first query
 - Uses SentenceTransformers (`all-MiniLM-L6-v2`) for local embeddings with low latency
 - Queries the CORE knowledge layer for atomic facts
+- Preserves document/source ID, chunk ID, text excerpt, and retrieval score
+  internally for verifiable citations
 
 ### Validation Layer (Guardrails)
 - Implements Jaccard Index logic with Time Normalization (e.g., matching `9h00` to `9:00 AM`)

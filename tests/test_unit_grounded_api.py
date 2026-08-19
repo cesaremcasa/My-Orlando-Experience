@@ -13,17 +13,20 @@ from src.retrieve.contracts import RetrievedChunk
 
 
 class FakeRetriever:
-    def retrieve(self, query: str, top_k: int = 3) -> list[RetrievedChunk]:
-        assert query == "When does Magic Kingdom open?"
-        assert top_k == 3
-        return [
+    def __init__(self, chunks: list[RetrievedChunk] | None = None):
+        self.chunks = [
             RetrievedChunk(
                 text="Magic Kingdom opens at 9:00 during December.",
                 source_document="Orlando_Park_Hours_Dez2025.pdf",
+                source_id="park-hours",
                 chunk_id=7,
                 score=0.12,
             )
-        ]
+        ] if chunks is None else chunks
+
+    def retrieve(self, query: str, top_k: int = 3) -> list[RetrievedChunk]:
+        assert top_k == 3
+        return self.chunks
 
 
 def test_query_schema_and_health_without_faiss_or_openai(monkeypatch):
@@ -38,9 +41,71 @@ def test_query_schema_and_health_without_faiss_or_openai(monkeypatch):
     assert health.json() == {"status": "healthy", "engine_ready": True}
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"response", "grounding_score", "latency_ms", "sources"}
-    assert body["sources"] == ["📌 Source: Magic Kingdom opens"]
+    assert {"response", "grounding_score", "latency_ms", "sources"}.issubset(body)
+    assert body["sources"] == ["park-hours"]
+    assert body["grounding_status"] == "grounded"
+    assert body["citations"][0] == {
+        "document": "Orlando_Park_Hours_Dez2025.pdf",
+        "source_id": "park-hours",
+        "chunk_id": 7,
+        "excerpt": "Magic Kingdom opens at 9:00 during December.",
+        "score": 0.12,
+    }
     assert body["grounding_score"] > 0
+
+
+def test_citations_dedupe_sources_and_bound_excerpt(monkeypatch):
+    chunks = [
+        RetrievedChunk("A" * 500, "guide.pdf", 1, 0.2, "guide"),
+        RetrievedChunk("duplicate", "guide.pdf", 1, 0.1, "guide"),
+        RetrievedChunk("Second fact", "other.pdf", 2, 0.3, "other"),
+    ]
+    class ContextProvider:
+        def generate(self, *, question: str, context: str) -> str:
+            return context
+
+    monkeypatch.setattr(main, "fusion_engine", FakeRetriever(chunks))
+    monkeypatch.setattr(main, "provider", ContextProvider())
+    body = TestClient(main.app).post("/query", json={"question": "What is the guide?"}).json()
+    assert body["sources"] == ["guide", "other"]
+    assert len(body["citations"]) == 2
+    assert len(body["citations"][0]["excerpt"]) == 280
+
+
+def test_empty_retrieval_abstains_without_calling_provider(monkeypatch):
+    class ExplodingProvider:
+        def generate(self, **_kwargs):
+            raise AssertionError("provider must not run without context")
+
+    monkeypatch.setattr(main, "fusion_engine", FakeRetriever([]))
+    monkeypatch.setattr(main, "provider", ExplodingProvider())
+    body = TestClient(main.app).post("/query", json={"question": "unknown"}).json()
+    assert body["grounding_status"] == "abstained"
+    assert body["response"] == main.ABSTENTION_RESPONSE
+    assert body["sources"] == [] and body["citations"] == []
+
+
+def test_low_grounding_abstains_and_provider_error_is_502(monkeypatch):
+    class WeakProvider:
+        def generate(self, **_kwargs):
+            return "unrelated answer"
+
+    class BrokenProvider:
+        def generate(self, **_kwargs):
+            raise RuntimeError("secret provider detail")
+
+    monkeypatch.setattr(main, "fusion_engine", FakeRetriever())
+    monkeypatch.setattr(main, "provider", WeakProvider())
+    weak = TestClient(main.app).post("/query", json={"question": "What is unrelated?"})
+    assert weak.status_code == 200
+    assert weak.json()["grounding_status"] == "abstained"
+    assert weak.json()["sources"] == []
+
+    monkeypatch.setattr(main, "provider", BrokenProvider())
+    failed = TestClient(main.app).post("/query", json={"question": "What is this?"})
+    assert failed.status_code == 502
+    assert failed.json()["detail"] == "Response provider unavailable"
+    assert "secret provider detail" not in failed.text
 
 
 def test_openai_adapter_is_lazy_and_does_not_require_key_at_import(monkeypatch):
