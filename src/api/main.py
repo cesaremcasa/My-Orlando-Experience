@@ -139,8 +139,8 @@ async def _execute_query(request: QueryRequest, start_time: float) -> QueryRespo
         retrieved = await asyncio.to_thread(engine.retrieve, request.question, 3)
         chunks = [item for item in retrieved if isinstance(item, RetrievedChunk)]
         context_list = [chunk.text for chunk in chunks]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Retrieval failed.")
 
     context_str = "\n".join(text for text in context_list if text.strip())
     citations, sources = _citation_data(chunks)
