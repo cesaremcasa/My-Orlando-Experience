@@ -3,6 +3,7 @@ import json
 import sys
 import os
 from sentence_transformers import SentenceTransformer
+from src.retrieve.contracts import RetrievedChunk
 
 class ContextFusionEngine:
     """
@@ -32,7 +33,7 @@ class ContextFusionEngine:
         distances, indices = self.index.search(query_vector, top_k)
         
         results = []
-        for idx in indices[0]:
+        for rank, idx in enumerate(indices[0]):
             if idx == -1: continue
             # Retrieve text and create a nice display string
             doc = self.metadata[idx]
@@ -42,6 +43,14 @@ class ContextFusionEngine:
             # Clean up source name for display
             if "/" in source: source = source.split("/")[-1]
             
-            results.append(text)
+            results.append(
+                RetrievedChunk(
+                    text=text,
+                    source_document=source,
+                    chunk_id=doc.get("chunk_id", int(idx)),
+                    score=float(distances[0][rank]),
+                    source_id=str(doc.get("source_id") or source),
+                )
+            )
             
         return results

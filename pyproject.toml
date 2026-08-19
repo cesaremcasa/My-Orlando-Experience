@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools==75.8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "my-orlando-experience"
+version = "0.3.0"
+description = "Grounded Orlando retrieval and response service."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "fastapi==0.115.8",
+  "pydantic==2.11.4",
+  "python-dotenv==1.0.1",
+  "uvicorn==0.34.0",
+]
+
+[project.optional-dependencies]
+rag = [
+  "faiss-cpu==1.9.0",
+  "langchain-core==1.2.4",
+  "langchain-openai==1.1.6",
+  "openai==2.14.0",
+  "sentence-transformers==3.3.1",
+]
+dev = [
+  "httpx==0.28.1",
+  "mypy==1.15.0",
+  "pip-audit==2.7.3",
+  "pytest==8.3.5",
+  "ruff==0.9.10",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra -m 'not integration'"
+markers = ["integration: requires FAISS/model assets and is opt-in"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+explicit_package_bases = true
+check_untyped_defs = false

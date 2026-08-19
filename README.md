@@ -1,4 +1,4 @@
-# Orlando Experience RAG Backend (v0.2.0-alpha)
+# Orlando Experience RAG Backend (v0.3.0)
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Framework](https://img.shields.io/badge/Framework-FastAPI%20%7C%20Uvicorn-green)
@@ -26,17 +26,24 @@ The system defines all essential layers required in a modern RAG backend:
 
 ---
 
-## Current Capabilities (v0.2.0-alpha)
+## Current Capabilities (v0.3.0)
 
 ### FastAPI Interface
 - **Endpoint:** `POST /query`
 - Accepts natural language queries via JSON
-- Returns structured responses including `response`, `grounding_score`, `latency_ms`, and `sources`
+- Returns the backward-compatible `response`, `grounding_score`, `latency_ms`,
+  and `sources` fields plus structured `citations` and
+  `grounding_status` (`grounded` or `abstained`)
+- Uses `ORLANDO_GROUNDING_MIN_SCORE` (default `0.15`) as a simple grounding
+  threshold; empty/weak evidence returns a fixed abstention response with no
+  sources or citations
 
 ### Retrieval System (ContextFusionEngine)
-- Loads FAISS-CPU indexes at startup
+- Loads FAISS-CPU indexes lazily on the first query
 - Uses SentenceTransformers (`all-MiniLM-L6-v2`) for local embeddings with low latency
 - Queries the CORE knowledge layer for atomic facts
+- Preserves document/source ID, chunk ID, text excerpt, and retrieval score
+  internally for verifiable citations
 
 ### Validation Layer (Guardrails)
 - Implements Jaccard Index logic with Time Normalization (e.g., matching `9h00` to `9:00 AM`)
@@ -71,7 +78,7 @@ The system is designed as a 3-layer pipeline, optimized for CPU-bound environmen
 - **Robustness**: Includes regex normalization for time formats (24h vs AM/PM) to reduce false positives in grounding checks
 
 ### 4. LLM Layer (External)
-- **Provider**: OpenAI (`gpt-4o-mini`)
+- **Provider**: lazy OpenAI adapter (`gpt-4o-mini`) with a deterministic test fake
 - **Role**: Synthesizes the retrieved context into a natural, empathetic response
 - **Economics**: Chosen for optimal cost/performance ratio on a startup-scale MVP
 
@@ -116,13 +123,35 @@ Requires **Python 3.11+**.
 python3.11 -m venv venv
 source venv/bin/activate
 
-# 2. Install Dependencies
-pip install -r requirements.txt
+# 2. Install the locked baseline (unit/dev path; RAG extras remain optional)
+uv sync --frozen --extra dev
 
 # 3. Configuration
 cp .env.example .env
 # Edit .env and add your OPENAI_API_KEY
 ```
+
+The public baseline intentionally ships no downloaded PDFs, source-derived
+JSONL, embeddings, or FAISS indexes. See `DATA_PROVENANCE.md`; operators must
+provide permitted inputs locally before enabling retrieval extras.
+
+To exercise the API without an external model or source data, run the
+deterministic CC0 fixture quickstart:
+
+```bash
+uv run python scripts/fake_quickstart.py
+```
+
+The optional real-provider canary uses only that synthetic context and is
+manual-only (never run by pull requests or forks):
+
+```bash
+OPENAI_API_KEY=... uv run python scripts/provider_canary.py
+```
+
+It prints only a response digest and citation count. With no key it remains
+pending. Grounding is lexical/entity-overlap validation, not an independent
+truth guarantee; weak or empty evidence is returned as `abstained`.
 
 ---
 
@@ -173,7 +202,7 @@ We selected `gpt-4o-mini` over larger models (like GPT-4) for this architecture:
 
 ## Current Status (v0.2.0-alpha)
 
-This repository is in **Phase 2, Service Integration**.
+This repository is in **v0.3.0 grounded retrieval baseline**.
 
 | Subsystem | Status |
 |-----------|--------|

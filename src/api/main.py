@@ -1,40 +1,40 @@
 import os
 import sys
 import time
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Import Core Modules
-from src.retrieve.context_fusion import ContextFusionEngine
 from src.validate.grounding_check import check_grounding
+from src.retrieve.contracts import RetrievedChunk, Retriever
+from src.respond.providers import ChatProvider, OpenAIProvider
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
 
 # Load Env
 load_dotenv()
 
-# --- Initialization ---
-# Initialize Engine Globally for performance
-try:
-    fusion_engine = ContextFusionEngine()
-except Exception as e:
-    print(f"[FATAL] Failed to initialize Fusion Engine: {e}")
-    fusion_engine = None
+# --- Lazy dependencies ---
+fusion_engine: Retriever | None = None
+provider: ChatProvider = OpenAIProvider()
 
-# Initialize LLM
-if not os.getenv("OPENAI_API_KEY"):
-    print("[WARN] OPENAI_API_KEY not found. LLM calls will fail.")
-    
-model = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+
+def get_fusion_engine() -> Retriever:
+    global fusion_engine
+    if fusion_engine is None:
+        from src.retrieve.context_fusion import ContextFusionEngine
+
+        fusion_engine = ContextFusionEngine()
+    return fusion_engine
 
 # FastAPI App
-app = FastAPI(title="Orlando RAG API", version="1.0.0")
+app = FastAPI(title="Orlando RAG API", version="0.3.0")
+GROUNDING_MIN_SCORE = float(os.getenv("ORLANDO_GROUNDING_MIN_SCORE", "0.15"))
+ABSTENTION_RESPONSE = "I don't have enough verified context to answer that reliably."
 
 # --- Request/Response Models ---
 class QueryRequest(BaseModel):
@@ -45,6 +45,34 @@ class QueryResponse(BaseModel):
     grounding_score: float
     latency_ms: float
     sources: Optional[List[str]] = None
+    citations: List[dict] = Field(default_factory=list)
+    grounding_status: Literal["grounded", "abstained"] = "grounded"
+
+
+def _citation_data(chunks: list[RetrievedChunk]) -> tuple[list[dict], list[str]]:
+    citations: list[dict] = []
+    sources: list[str] = []
+    seen_chunks: set[tuple[str, str]] = set()
+    for chunk in chunks:
+        document = str(chunk.source_document)
+        source_id = str(chunk.source_id or document)
+        chunk_id = str(chunk.chunk_id)
+        key = (source_id, chunk_id)
+        if key in seen_chunks:
+            continue
+        seen_chunks.add(key)
+        if source_id not in sources:
+            sources.append(source_id)
+        citations.append(
+            {
+                "document": document,
+                "source_id": source_id,
+                "chunk_id": chunk.chunk_id,
+                "excerpt": chunk.text[:280],
+                "score": float(chunk.score),
+            }
+        )
+    return citations, sources
 
 def _format_sources(context_list: List[str]) -> List[str]:
     """
@@ -74,42 +102,50 @@ def query_endpoint(request: QueryRequest):
     """
     start_time = time.time()
     
-    if not fusion_engine:
+    try:
+        engine = get_fusion_engine()
+    except Exception:
         raise HTTPException(status_code=503, detail="Fusion Engine not initialized.")
     
     # 1. Retrieve Context
     try:
-        context_list = fusion_engine.retrieve(request.question, top_k=3)
+        retrieved = engine.retrieve(request.question, top_k=3)
+        chunks = [item for item in retrieved if isinstance(item, RetrievedChunk)]
+        context_list = [chunk.text for chunk in chunks]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
     
-    context_str = "\n".join(context_list)
+    context_str = "\n".join(text for text in context_list if text.strip())
+    citations, sources = _citation_data(chunks)
+    if not context_str:
+        return QueryResponse(
+            response=ABSTENTION_RESPONSE,
+            grounding_score=0.0,
+            latency_ms=round((time.time() - start_time) * 1000, 2),
+            sources=[],
+            citations=[],
+            grounding_status="abstained",
+        )
     
-    # 2. Generate Response
-    template = """You are a thoughtful Orlando trip advisor.
-Answer the question using ONLY the verified facts provided in the Context below.
-Mirror the user's concern. If unsure, say so.
-Be concise, warm, and human.
-
-Context:
-{context}
-
-Question: {question}
-"""
-    
+    # 2. Generate Response through the lazy provider abstraction
     try:
-        prompt = ChatPromptTemplate.from_template(template)
-        chain = prompt | model
-        llm_response_obj = chain.invoke({"question": request.question, "context": context_str})
-        response_text = llm_response_obj.content
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM Generation failed: {str(e)}")
+        response_text = provider.generate(question=request.question, context=context_str)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Response provider unavailable")
         
     # 3. Validate Grounding
     score = check_grounding(request.question, context_list, response_text)
     
     # 4. Format Sources for UI
-    ui_sources = _format_sources(context_list)
+    if score < GROUNDING_MIN_SCORE:
+        return QueryResponse(
+            response=ABSTENTION_RESPONSE,
+            grounding_score=score,
+            latency_ms=round((time.time() - start_time) * 1000, 2),
+            sources=[],
+            citations=[],
+            grounding_status="abstained",
+        )
     
     # Calculate Latency
     latency_ms = (time.time() - start_time) * 1000
@@ -118,7 +154,9 @@ Question: {question}
         response=response_text,
         grounding_score=score,
         latency_ms=round(latency_ms, 2),
-        sources=ui_sources
+        sources=sources,
+        citations=citations,
+        grounding_status="grounded",
     )
 
 # Health Check
