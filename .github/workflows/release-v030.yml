@@ -33,7 +33,9 @@ jobs:
           uv export --frozen --all-extras --no-emit-project --format requirements.txt --no-hashes --output-file "$RUNNER_TEMP/requirements.lock.txt"
           uv run pip-audit -r "$RUNNER_TEMP/requirements.lock.txt" --no-deps --disable-pip --format cyclonedx-json --output dist/sbom.cdx.json || echo "::warning::locked dependency advisories recorded"
           test -s dist/sbom.cdx.json
-          sha256sum dist/* > dist/SHA256SUMS
+          cd dist
+          sha256sum *.whl *.tar.gz sbom.cdx.json > SHA256SUMS
+          sha256sum -c SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: grounded-v0.3.0-${{ github.sha }}
