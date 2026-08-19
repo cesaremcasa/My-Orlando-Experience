@@ -109,6 +109,24 @@ def test_low_grounding_abstains_and_provider_error_is_502(monkeypatch):
     assert "secret provider detail" not in failed.text
 
 
+def test_retrieval_error_does_not_leak_exception_or_path(monkeypatch):
+    secret = "TOP-SECRET-RETRIEVAL-TOKEN"
+    leaked_path = "/secret/data/index/faiss.index"
+
+    class BrokenRetriever:
+        def retrieve(self, query: str, top_k: int = 3):
+            raise RuntimeError(f"{secret}: {leaked_path}")
+
+    monkeypatch.setattr(main, "fusion_engine", BrokenRetriever())
+    monkeypatch.setattr(main, "provider", FakeProvider())
+    failed = TestClient(main.app).post("/query", json={"question": "When does Magic Kingdom open?"})
+    assert failed.status_code == 500
+    assert failed.json() == {"detail": "Retrieval failed."}
+    assert secret not in failed.text
+    assert leaked_path not in failed.text
+    assert "RuntimeError" not in failed.text
+
+
 def test_openai_adapter_is_lazy_and_does_not_require_key_at_import(monkeypatch):
     from src.respond.providers import OpenAIProvider
 

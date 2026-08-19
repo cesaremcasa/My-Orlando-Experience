@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m pip install --disable-pip-version-check uv==0.10.10
-      - run: uv sync --frozen --extra dev
+      - run: uv sync --frozen --extra dev --extra agentops
       - run: uv run pytest -q
       - run: uv run python scripts/fake_quickstart.py
       - run: uv run ruff check src tests scripts
