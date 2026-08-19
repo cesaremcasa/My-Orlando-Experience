@@ -61,7 +61,19 @@ def main_check() -> int:
     chat_body = chat.json()
     if chat_body["grounding_status"] != "grounded" or not chat_body["citations"]:
         raise SystemExit("fake AgentOps smoke did not produce grounded synthetic citations")
-    print("fake quickstart PASS: /query and /agent/chat returned grounded synthetic citations")
+    feedback = client.post(
+        "/feedback",
+        json={
+            "response_id": chat_body["response_id"],
+            "session_id": "quickstart-session",
+            "rating": 5,
+            "accepted": True,
+        },
+        headers={"X-Beta-User": "beta-001"},
+    )
+    if feedback.status_code != 200:
+        raise SystemExit(f"fake feedback smoke failed with HTTP {feedback.status_code}")
+    print("fake quickstart PASS: /query, /agent/chat, and /feedback returned synthetic success")
     return 0
 
 

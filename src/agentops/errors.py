@@ -48,3 +48,8 @@ class ConfigurationError(AgentOpsError):
             500,
             'AgentOps runtime requires extras. Install with: pip install -e ".[rag,agentops]"',
         )
+
+
+class FeedbackError(AgentOpsError):
+    def __init__(self) -> None:
+        super().__init__("feedback", 500, "Feedback operation failed.")

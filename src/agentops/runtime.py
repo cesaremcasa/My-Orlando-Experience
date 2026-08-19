@@ -72,9 +72,33 @@ class AgentRuntime:
         message: str,
         remember: bool,
     ) -> AgentChatResponse:
+        from src.agentops.tracing import current_trace_id, start_span
+
         self.ensure()
         global _ready
         _ready = True
+        with start_span("agent.request", {"session_id": session_id, "beta_user": user_id}) as span:
+            result = await self._chat_body(
+                user_id=user_id,
+                session_id=session_id,
+                message=message,
+                remember=remember,
+            )
+            result.trace_id = current_trace_id()
+            span.set_attribute("status", result.grounding_status)
+            span.set_attribute("grounding_status", result.grounding_status)
+            span.set_attribute("citation_count", len(result.citations))
+            span.set_attribute("response_id", result.response_id)
+            return result
+
+    async def _chat_body(
+        self,
+        *,
+        user_id: str,
+        session_id: str,
+        message: str,
+        remember: bool,
+    ) -> AgentChatResponse:
         from google.adk.runners import Runner
         from google.genai import types
 
@@ -216,8 +240,11 @@ def get_runtime() -> AgentRuntime:
 
 def reset_runtime(runtime: AgentRuntime | None = None) -> AgentRuntime:
     global _runtime, _ready
+    from src.agentops.tracing import reset_tracing
+
     _runtime = runtime if runtime is not None else AgentRuntime()
     _ready = False
+    reset_tracing()
     return _runtime
 
 
