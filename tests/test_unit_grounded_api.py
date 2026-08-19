@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -129,3 +130,12 @@ def test_retrieved_chunk_preserves_internal_metadata():
         "chunk-4",
         0.42,
     )
+
+
+def test_cc0_fixture_is_small_and_structured():
+    fixture = json.loads(
+        (Path(__file__).resolve().parents[1] / "tests/fixtures/synthetic_context.json").read_text()
+    )
+    assert fixture["license"] == "CC0-1.0"
+    assert fixture["source_id"] == "cc0-fixture-001"
+    assert len(fixture["text"]) < 200

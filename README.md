@@ -131,6 +131,28 @@ cp .env.example .env
 # Edit .env and add your OPENAI_API_KEY
 ```
 
+The public baseline intentionally ships no downloaded PDFs, source-derived
+JSONL, embeddings, or FAISS indexes. See `DATA_PROVENANCE.md`; operators must
+provide permitted inputs locally before enabling retrieval extras.
+
+To exercise the API without an external model or source data, run the
+deterministic CC0 fixture quickstart:
+
+```bash
+uv run python scripts/fake_quickstart.py
+```
+
+The optional real-provider canary uses only that synthetic context and is
+manual-only (never run by pull requests or forks):
+
+```bash
+OPENAI_API_KEY=... uv run python scripts/provider_canary.py
+```
+
+It prints only a response digest and citation count. With no key it remains
+pending. Grounding is lexical/entity-overlap validation, not an independent
+truth guarantee; weak or empty evidence is returned as `abstained`.
+
 ---
 
 ## Running the System

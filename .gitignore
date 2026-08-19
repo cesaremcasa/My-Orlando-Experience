@@ -4,12 +4,23 @@ venv/
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 
 # Secrets
 .env
+
+# External/source-derived assets are downloaded or rebuilt locally; they are
+# not redistributed by this repository.
+data/raw_pdfs/**
+data/processed/**
+data/embeddings/**
+data/index/**
+data/context_intelligence/**
+data/experience_strategy/**
 
 # Python
 __pycache__/
