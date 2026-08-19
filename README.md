@@ -56,7 +56,7 @@ The system defines all essential layers required in a modern RAG backend:
 
 ### Configuration
 - Central `.env` file (never committed)
-- Defines `OPENAI_API_KEY` and model settings
+- Defines `XAI_API_KEY`, with optional `XAI_BASE_URL` and `XAI_MODEL` overrides
 
 ---
 
@@ -78,9 +78,8 @@ The system is designed as a 3-layer pipeline, optimized for CPU-bound environmen
 - **Robustness**: Includes regex normalization for time formats (24h vs AM/PM) to reduce false positives in grounding checks
 
 ### 4. LLM Layer (External)
-- **Provider**: lazy OpenAI adapter (`gpt-4o-mini`) with a deterministic test fake
+- **Provider**: lazy xAI/Grok adapter with a deterministic test fake
 - **Role**: Synthesizes the retrieved context into a natural, empathetic response
-- **Economics**: Chosen for optimal cost/performance ratio on a startup-scale MVP
 
 ---
 
@@ -128,7 +127,7 @@ uv sync --frozen --extra dev
 
 # 3. Configuration
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Edit .env and add your XAI_API_KEY
 ```
 
 The public baseline intentionally ships no downloaded PDFs, source-derived
@@ -142,11 +141,11 @@ deterministic CC0 fixture quickstart:
 uv run python scripts/fake_quickstart.py
 ```
 
-The optional real-provider canary uses only that synthetic context and is
+The optional Grok/xAI provider canary uses only that synthetic context and is
 manual-only (never run by pull requests or forks):
 
 ```bash
-OPENAI_API_KEY=... uv run python scripts/provider_canary.py
+XAI_API_KEY=... uv run python scripts/provider_canary.py
 ```
 
 It prints only a response digest and citation count. With no key it remains
@@ -187,16 +186,6 @@ For debugging or direct terminal usage:
 ```bash
 python src/respond/generate_response.py "What time does Magic Kingdom open?"
 ```
-
----
-
-## Model Strategy & Economics
-
-We selected `gpt-4o-mini` over larger models (like GPT-4) for this architecture:
-
-1. **Latency Constraints:** The local retrieval pipeline is highly optimized (~20ms). Using a heavier LLM would disproportionately increase the total request time without adding factual value (since facts are retrieved via RAG).
-2. **Cost Efficiency:** ~$0.15 / 1M input tokens. This pricing makes high-volume testing feasible for an MVP budget.
-3. **Performance Parity:** For specific, fact-restricted tasks (like "What time does the park open?"), `mini` performs nearly identically to larger models because the intelligence comes from the fusion of context, not just parameter size.
 
 ---
 

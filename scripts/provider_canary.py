@@ -7,14 +7,14 @@ import hashlib
 import os
 import sys
 
-from src.respond.providers import OpenAIProvider
+from src.respond.providers import XAIProvider
 
 
 def main() -> int:
-    if not os.getenv("OPENAI_API_KEY"):
-        raise SystemExit("OPENAI_API_KEY is required; canary is pending")
+    if not os.getenv("XAI_API_KEY"):
+        raise SystemExit("XAI_API_KEY is required; canary is pending")
     context = "Synthetic fixture: Magic Kingdom opens at 09:00 for this test context."
-    provider = OpenAIProvider()
+    provider = XAIProvider()
     response = provider.generate(question="When does the synthetic fixture say the park opens?", context=context)
     if not response.strip():
         raise SystemExit("provider returned an empty response")
