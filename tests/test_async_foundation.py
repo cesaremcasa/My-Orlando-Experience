@@ -116,8 +116,11 @@ blocked = (
 imported = [name for name in blocked if name in sys.modules]
 assert imported == [], imported
 health = TestClient(api_main.app).get("/health")
+agent_health = TestClient(api_main.app).get("/agent/health")
 assert health.status_code == 200
 assert health.json() == {"status": "healthy", "engine_ready": False}
+assert agent_health.status_code == 200
+assert agent_health.json()["status"] == "healthy"
 print("import-health-ok")
 """
     completed = subprocess.run(

@@ -27,6 +27,7 @@ rag = [
 agentops = [
   "aiosqlite==0.22.1",
   "arize-phoenix-otel==0.17.1",
+  "faiss-cpu==1.9.0",
   "google-adk==2.7.1",
   "litellm==1.97.0",
   "openinference-instrumentation-google-adk==0.1.20",

@@ -13,6 +13,9 @@ dist/
 # Secrets
 .env
 
+# AgentOps local memory (SQLite is authoritative) — never commit user content
+.agentops/
+
 # External/source-derived assets are downloaded or rebuilt locally; they are
 # not redistributed by this repository.
 data/raw_pdfs/**
