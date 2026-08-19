@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 # Import Core Modules
 from src.validate.grounding_check import check_grounding
 from src.retrieve.contracts import RetrievedChunk, Retriever
-from src.respond.providers import ChatProvider, OpenAIProvider
+from src.respond.providers import ChatProvider, XAIProvider
 from dotenv import load_dotenv
 
 # Load Env
@@ -20,7 +20,7 @@ load_dotenv()
 
 # --- Lazy dependencies ---
 fusion_engine: Retriever | None = None
-provider: ChatProvider = OpenAIProvider()
+provider: ChatProvider = XAIProvider()
 
 
 def get_fusion_engine() -> Retriever:
