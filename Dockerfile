@@ -1,13 +1,17 @@
 FROM python:3.11-slim-bookworm
 
+# Local AgentOps image: installs .[agentops] (FAISS + SentenceTransformer package).
+# Does not install the gcp extra. Does not download the embedding model.
+# Does not prove a real Vertex or Grok path.
+
 RUN useradd --create-home --uid 10001 appuser
 WORKDIR /app
 
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 
-RUN pip install --no-cache-dir --disable-pip-version-check ".[agentops]" httpx==0.28.1 \
-    && rm -rf /root/.cache/pip
+RUN pip install --no-cache-dir --disable-pip-version-check ".[agentops]" \
+    && rm -rf /root/.cache/pip /root/.cache/huggingface
 
 USER 10001
 ENV PYTHONUNBUFFERED=1

@@ -1221,7 +1221,7 @@ wheels = [
 
 [[package]]
 name = "my-orlando-experience"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -1236,9 +1236,11 @@ agentops = [
     { name = "arize-phoenix-otel" },
     { name = "faiss-cpu" },
     { name = "google-adk" },
+    { name = "httpx" },
     { name = "litellm" },
     { name = "openinference-instrumentation-google-adk" },
     { name = "opentelemetry-sdk" },
+    { name = "sentence-transformers" },
     { name = "websockets" },
 ]
 dev = [
@@ -1268,6 +1270,7 @@ requires-dist = [
     { name = "fastapi", specifier = "==0.141.1" },
     { name = "google-adk", marker = "extra == 'agentops'", specifier = "==2.7.1" },
     { name = "google-cloud-aiplatform", marker = "extra == 'gcp'", specifier = "==1.165.0" },
+    { name = "httpx", marker = "extra == 'agentops'", specifier = "==0.28.1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = "==0.28.1" },
     { name = "langchain-core", marker = "extra == 'rag'", specifier = "==1.2.4" },
     { name = "langchain-openai", marker = "extra == 'rag'", specifier = "==1.1.6" },
@@ -1281,6 +1284,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.3.5" },
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.9.10" },
+    { name = "sentence-transformers", marker = "extra == 'agentops'", specifier = "==3.3.1" },
     { name = "sentence-transformers", marker = "extra == 'rag'", specifier = "==3.3.1" },
     { name = "uvicorn", specifier = "==0.34.0" },
     { name = "websockets", marker = "extra == 'agentops'", specifier = "==15.0.1" },
