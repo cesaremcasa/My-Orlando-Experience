@@ -46,6 +46,11 @@ The system defines all essential layers required in a modern RAG backend:
   `pip install -e ".[rag,agentops]"`. Tests use a deterministic fake
   embedder; real Grok is a manual canary only. FAISS indexes are rebuilt
   per search from user-filtered SQLite rows and are not persisted.
+  Additive beta surfaces: `POST /feedback`, Phoenix/OpenTelemetry spans
+  when `PHOENIX_COLLECTOR_ENDPOINT` or `ORLANDO_TRACE_EXPORTER=memory` is
+  set, and `python scripts/eval_agentops.py` for the 20-case CC0 harness.
+  Default `ORLANDO_TRACE_CONTENT=0` never records prompts, responses,
+  retrieved text, memory content, feedback reasons, or API keys.
 
 ### Retrieval System (ContextFusionEngine)
 - Loads FAISS-CPU indexes lazily on the first query
