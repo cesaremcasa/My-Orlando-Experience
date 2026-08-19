@@ -10,8 +10,8 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11,<3.12"
 dependencies = [
-  "fastapi==0.115.8",
-  "pydantic==2.11.4",
+  "fastapi==0.141.1",
+  "pydantic==2.13.4",
   "python-dotenv==1.0.1",
   "uvicorn==0.34.0",
 ]
@@ -21,8 +21,20 @@ rag = [
   "faiss-cpu==1.9.0",
   "langchain-core==1.2.4",
   "langchain-openai==1.1.6",
-  "openai==2.14.0",
+  "openai==2.54.0",
   "sentence-transformers==3.3.1",
+]
+agentops = [
+  "aiosqlite==0.22.1",
+  "arize-phoenix-otel==0.17.1",
+  "google-adk==2.7.1",
+  "litellm==1.97.0",
+  "openinference-instrumentation-google-adk==0.1.20",
+  "opentelemetry-sdk==1.42.1",
+  "websockets==15.0.1",
+]
+gcp = [
+  "google-cloud-aiplatform==1.165.0",
 ]
 dev = [
   "httpx==0.28.1",
