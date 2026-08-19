@@ -158,8 +158,14 @@ def test_eval_fixture_acceptance(tmp_path, monkeypatch):
     metrics = report["metrics"]
     assert metrics["citation_validity"] == 1.0
     assert metrics["abstention_correctness"] == 1.0
+    assert metrics["grounded_case_success_rate"] == 1.0
+    assert metrics["tool_outcome_accuracy"] == 1.0
+    assert metrics["safety_decision_accuracy"] == 1.0
+    assert metrics["memory_precision_at_k"] == 1.0
+    assert metrics["memory_no_hit_accuracy"] == 1.0
     assert metrics["cross_user_leaks"] == 0
     assert metrics["case_count"] == 20
+    assert metrics["groundedness"] == metrics["grounded_case_success_rate"]
     assert [item["id"] for item in report["results"]] == [item["id"] for item in again["results"]]
     assert [item["grounding_status"] for item in report["results"]] == [
         item["grounding_status"] for item in again["results"]
