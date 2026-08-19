@@ -60,34 +60,52 @@
     {
       "id": "relevant-memory-001",
       "kind": "relevant_memory",
-      "user_id": "beta-001",
+      "user_id": "beta-mem-001",
       "session_id": "eval-007",
       "message": "When does the synthetic fixture park open?",
       "remember": false,
       "seed_memory": [
         {
-          "user_id": "beta-001",
-          "content": "beta-001 prefers the synthetic evening fireworks fixture",
-          "ttl_seconds": 3600
+          "user_id": "beta-mem-001",
+          "content": "beta-mem-001 remembers the synthetic park hours fixture",
+          "ttl_seconds": 3600,
+          "label": "park-hours-pref"
         }
       ],
-      "expect": {"grounding_status": "grounded", "citation_valid": true, "abstain": false, "memory_hits_min": 1}
+      "expect": {
+        "grounding_status": "grounded",
+        "citation_valid": true,
+        "abstain": false,
+        "relevant_memory_labels": ["park-hours-pref"],
+        "memory_k": 3,
+        "safety_decision": "pass",
+        "tool_outcome": "ok"
+      }
     },
     {
       "id": "expired-memory-001",
       "kind": "expired_memory",
-      "user_id": "beta-001",
+      "user_id": "beta-mem-exp",
       "session_id": "eval-008",
       "message": "When does the synthetic fixture park open?",
       "remember": false,
       "seed_memory": [
         {
-          "user_id": "beta-001",
+          "user_id": "beta-mem-exp",
           "content": "expired synthetic note about a snack stand",
-          "ttl_seconds": 0
+          "ttl_seconds": 0,
+          "label": "expired-snack"
         }
       ],
-      "expect": {"grounding_status": "grounded", "citation_valid": true, "abstain": false, "memory_hits_min": 0, "exclude_excerpt": "expired"}
+      "expect": {
+        "grounding_status": "grounded",
+        "citation_valid": true,
+        "abstain": false,
+        "expect_no_memory_hits": true,
+        "relevant_memory_labels": [],
+        "safety_decision": "pass",
+        "tool_outcome": "ok"
+      }
     },
     {
       "id": "cross-user-write-001",
