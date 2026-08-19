@@ -42,6 +42,9 @@ class AgentHealthResponse(BaseModel):
     status: Literal["healthy"] = "healthy"
     agent_ready: bool = False
     memory_backend: str = "local"
+    eval_backend: str = "local"
+    vertex_ready: bool = False
+    vertex_issues: list[str] = Field(default_factory=list)
 
 
 class MemoryCandidate(BaseModel):

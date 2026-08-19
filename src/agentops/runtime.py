@@ -17,7 +17,9 @@ from src.agentops.settings import (
     agent_max_concurrency,
     agent_timeout_seconds,
     data_dir,
+    eval_backend,
     memory_backend,
+    vertex_config,
     xai_model,
 )
 from src.validate.grounding_check import check_grounding
@@ -53,7 +55,12 @@ class AgentRuntime:
         if self.retriever is None:
             raise RetrievalError()
         if self.memory is None:
-            self.memory = LocalMemoryStore(root=data_dir())
+            if memory_backend() == "vertex":
+                from src.agentops.memory.vertex import VertexMemoryStore
+
+                self.memory = VertexMemoryStore()
+            else:
+                self.memory = LocalMemoryStore(root=data_dir())
         if self.model is None:
             if self.fake_llm is not None:
                 self.model = self.fake_llm.as_adk()
@@ -224,10 +231,14 @@ class AgentRuntime:
 
 
 def agent_health_payload() -> dict[str, Any]:
+    cfg = vertex_config()
     return {
         "status": "healthy",
         "agent_ready": _ready,
         "memory_backend": memory_backend(),
+        "eval_backend": eval_backend(),
+        "vertex_ready": False,
+        "vertex_issues": list(cfg["issues"]),
     }
 
 

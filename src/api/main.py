@@ -85,18 +85,41 @@ def get_fusion_engine() -> Retriever:
     return fusion_engine
 
 
+def _maybe_install_fake_runtime() -> None:
+    if os.getenv("ORLANDO_FAKE_RUNTIME") != "1":
+        return
+    from src.agentops.fakes import FakeAgentLlm, FixtureRetriever
+    from src.agentops.memory.embedder import FakeEmbedder
+    from src.agentops.memory.store import LocalMemoryStore
+    from src.agentops.runtime import AgentRuntime, reset_runtime
+    from src.agentops.settings import data_dir
+    from src.respond.providers import FakeProvider
+
+    global fusion_engine, provider
+    fusion_engine = FixtureRetriever()
+    provider = FakeProvider()
+    reset_runtime(
+        AgentRuntime(
+            retriever=fusion_engine,
+            memory=LocalMemoryStore(root=data_dir(), embedder=FakeEmbedder(), use_faiss=False),
+            fake_llm=FakeAgentLlm(),
+        )
+    )
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Bind query/agent limiters only. Retrieval, ADK, and providers stay lazy."""
     reset_query_semaphore()
     reset_agent_semaphore()
+    _maybe_install_fake_runtime()
     yield
     global _query_semaphore, _agent_semaphore
     _query_semaphore = None
     _agent_semaphore = None
 
 
-app = FastAPI(title="Orlando RAG API", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Orlando RAG API", version="0.4.0", lifespan=lifespan)
 
 
 # --- Request/Response Models ---
