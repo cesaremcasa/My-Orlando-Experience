@@ -1,0 +1,24 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ORLANDO_FAKE_RUNTIME: "1"
+      ORLANDO_BETA_USERS: beta-001,beta-002,beta-003
+      ORLANDO_AGENTOPS_DATA_DIR: /tmp/agentops
+      ORLANDO_TRACE_CONTENT: "0"
+      ORLANDO_MEMORY_BACKEND: local
+      ORLANDO_EVAL_BACKEND: local
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  phoenix:
+    profiles: ["phoenix"]
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "6006:6006"
+      - "4317:4317"

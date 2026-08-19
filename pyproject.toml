@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "my-orlando-experience"
-version = "0.3.0"
+version = "0.4.0"
 description = "Grounded Orlando retrieval and response service."
 readme = "README.md"
 license = { file = "LICENSE" }
