@@ -25,6 +25,13 @@ def main() -> int:
         raise SystemExit("huggingface model snapshots present; image build must not download models")
     print("no_model_snapshots=true")
 
+    import sys
+
+    before = set(sys.modules)
+    import src.api.main as api_main
+    loaded = sorted(name for name in ("faiss", "google.adk", "litellm") if name in sys.modules and name not in before)
+    if loaded:
+        raise SystemExit(f"importing src.api.main loaded {loaded}")
     from src.agentops.memory.embedder import FakeEmbedder, SentenceTransformerEmbedder
     from src.agentops.memory.store import LocalMemoryStore
 
@@ -32,8 +39,10 @@ def main() -> int:
     if embedder._model is not None:
         raise SystemExit("SentenceTransformer model loaded unexpectedly")
     print("st_model_unloaded=true")
+    print("api_import_lazy=true")
 
     root = Path(os.getenv("ORLANDO_AGENTOPS_DATA_DIR") or tempfile.mkdtemp(prefix="orlando-mem-"))
+    os.environ.setdefault("ORLANDO_AGENTOPS_DATA_DIR", str(root))
     store = LocalMemoryStore(root=root, embedder=FakeEmbedder(), use_faiss=True)
     memory_id = asyncio.run(
         store.add(
@@ -47,6 +56,54 @@ def main() -> int:
     if not hits or hits[0].memory_id != memory_id:
         raise SystemExit("FAISS add/search with FakeEmbedder failed")
     print("faiss_fake_embedder_search=ok")
+
+    if os.getenv("ORLANDO_FAKE_RUNTIME") == "1" or os.getenv("ORLANDO_CONTAINER_EVIDENCE") == "1":
+        os.environ["ORLANDO_FAKE_RUNTIME"] = "1"
+        from fastapi.testclient import TestClient
+
+        from src.agentops.fakes import FakeAgentLlm, FixtureRetriever
+        from src.agentops.runtime import AgentRuntime, reset_runtime
+        from src.respond.providers import FakeProvider
+
+        api_main.fusion_engine = FixtureRetriever()
+        api_main.provider = FakeProvider()
+        reset_runtime(
+            AgentRuntime(
+                retriever=FixtureRetriever(),
+                memory=LocalMemoryStore(root=root, embedder=FakeEmbedder(), use_faiss=False),
+                fake_llm=FakeAgentLlm(),
+            )
+        )
+        with TestClient(api_main.app) as client:
+            health = client.get("/health")
+            query = client.post("/query", json={"question": "When does the fixture open?"})
+            agent_health = client.get("/agent/health")
+            chat = client.post(
+                "/agent/chat",
+                json={"session_id": "container-session", "message": "When does the fixture open?"},
+                headers={"X-Beta-User": "beta-001"},
+            )
+            if health.status_code != 200:
+                raise SystemExit("/health failed")
+            if query.status_code != 200:
+                raise SystemExit("/query failed")
+            if agent_health.status_code != 200:
+                raise SystemExit("/agent/health failed")
+            if chat.status_code != 200:
+                raise SystemExit("/agent/chat failed")
+            feedback = client.post(
+                "/feedback",
+                json={
+                    "response_id": chat.json()["response_id"],
+                    "session_id": "container-session",
+                    "rating": 5,
+                    "accepted": True,
+                },
+                headers={"X-Beta-User": "beta-001"},
+            )
+            if feedback.status_code != 200:
+                raise SystemExit("/feedback failed")
+        print("http_fake_smoke=ok")
     return 0
 
 
