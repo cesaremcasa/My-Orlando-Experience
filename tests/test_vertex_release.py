@@ -33,6 +33,32 @@ def test_vertex_health_reports_incomplete_config(monkeypatch):
     assert "GOOGLE_CLOUD_PROJECT is not set" in payload["vertex_issues"]
 
 
+def test_vertex_health_reports_missing_engine_when_project_set(monkeypatch):
+    monkeypatch.setenv("ORLANDO_MEMORY_BACKEND", "vertex")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "orlando-506100")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    monkeypatch.delenv("GOOGLE_CLOUD_AGENT_ENGINE_ID", raising=False)
+    reset_runtime()
+    payload = agent_health_payload()
+    assert payload["vertex_status"] == "incomplete"
+    assert payload["vertex_ready"] is False
+    assert "GOOGLE_CLOUD_AGENT_ENGINE_ID is not set" in payload["vertex_issues"]
+
+
+def test_local_backend_ignores_informational_gcp_project(monkeypatch):
+    monkeypatch.setenv("ORLANDO_MEMORY_BACKEND", "local")
+    monkeypatch.setenv("ORLANDO_EVAL_BACKEND", "local")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "orlando-506100")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    monkeypatch.delenv("GOOGLE_CLOUD_AGENT_ENGINE_ID", raising=False)
+    reset_runtime()
+    payload = agent_health_payload()
+    assert payload["memory_backend"] == "local"
+    assert payload["vertex_status"] == "not_selected"
+    assert payload["vertex_ready"] is False
+    assert payload["vertex_issues"] == []
+
+
 def test_vertex_unprovisioned_status_when_env_complete(monkeypatch):
     monkeypatch.setenv("ORLANDO_MEMORY_BACKEND", "vertex")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "demo-project")
@@ -112,7 +138,25 @@ def test_preflight_is_read_only_and_has_no_invalid_dry_run():
     assert "gcloud auth login" in completed.stdout
     assert "STOP" in completed.stdout
     assert "--dry-run" not in completed.stdout
+    assert "billing: NOT ENABLED" in completed.stdout
+    assert "GOOGLE_CLOUD_AGENT_ENGINE_ID=NOT SET" in completed.stdout or "NOT SET" in completed.stdout
     assert wrapper.count("subprocess") == 0
+
+
+def test_preflight_does_not_invoke_subprocess(monkeypatch, capsys):
+    def boom(*args, **kwargs):
+        raise AssertionError(f"subprocess invoked: {args}")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    monkeypatch.setattr(subprocess, "call", boom)
+    monkeypatch.setattr(subprocess, "check_output", boom)
+    from src.agentops.cli.preflight import main as preflight_main
+
+    assert preflight_main() == 0
+    captured = capsys.readouterr()
+    assert "PROPOSED COMMAND — DO NOT RUN WITHOUT APPROVAL" in captured.out
+    assert "gcloud services enable" in captured.out
 
 
 def test_import_health_does_not_load_vertex():

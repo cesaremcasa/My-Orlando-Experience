@@ -5,13 +5,23 @@ from src.agentops.settings import DEFAULT_GCP_LOCATION, vertex_config
 
 def render() -> str:
     cfg = vertex_config()
-    project = cfg["project"] or "<GOOGLE_CLOUD_PROJECT>"
+    project = cfg["project"] or "orlando-506100"
     location = cfg["location"] or DEFAULT_GCP_LOCATION
-    engine = cfg["engine_id"] or "<GOOGLE_CLOUD_AGENT_ENGINE_ID>"
+    engine = cfg["engine_id"] or "NOT SET"
     lines = [
         "My Orlando AgentOps v0.4.1 GCP preflight (read-only)",
         "GCP STATUS: NOT PROVISIONED / APPROVAL REQUIRED",
         "Vertex client implementation: fail-closed unprovisioned scaffold (Pre-GA Memory Bank).",
+        "Local backends remain selected unless ORLANDO_MEMORY_BACKEND or ORLANDO_EVAL_BACKEND is vertex.",
+        "GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are informational; they are not required for local mode.",
+        "GOOGLE_CLOUD_AGENT_ENGINE_ID remains unset. Do not create an Agent Engine from this command.",
+        "",
+        "Operator-stated facts (not queried; this command does not authenticate):",
+        "- billing: NOT ENABLED",
+        "- Vertex AI API: NOT INTENTIONALLY ENABLED",
+        "- Agent Engine: NONE",
+        "- Memory Bank: NONE",
+        "- Cloud Run service: NONE",
         "",
         "Required APIs (not enabled by this command):",
         "- run.googleapis.com",

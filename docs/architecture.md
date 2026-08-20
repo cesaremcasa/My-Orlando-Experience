@@ -11,4 +11,4 @@ Memory: SQLite is authoritative. Local search rebuilds an in-memory FAISS `Index
 
 Provider: xAI Grok only. A real Grok canary is pending. Vertex BYOR eval is a fail-closed contract that would consume Grok responses if later implemented. Gemini is not a production fallback.
 
-GCP: **NOT PROVISIONED / APPROVAL REQUIRED**.
+GCP: **NOT PROVISIONED / APPROVAL REQUIRED**. Informational identity may be `orlando-506100` / `us-central1`. Billing is not enabled. Agent Engine ID is unset. Local backends remain selected.

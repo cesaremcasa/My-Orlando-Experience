@@ -2,6 +2,15 @@
 
 **Status: NOT PROVISIONED / APPROVAL REQUIRED**
 
+Operator-stated facts (not verified by repository code):
+
+- `GOOGLE_CLOUD_PROJECT=orlando-506100` is informational and is not required for local mode
+- `GOOGLE_CLOUD_LOCATION=us-central1`
+- `GOOGLE_CLOUD_AGENT_ENGINE_ID` is unset
+- billing is not enabled
+- Vertex AI API is not intentionally enabled
+- no Agent Engine, Memory Bank, or Cloud Run service exists
+
 Print the gate:
 
 ```bash
