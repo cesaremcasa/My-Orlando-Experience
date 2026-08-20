@@ -46,7 +46,7 @@ class ConfigurationError(AgentOpsError):
         super().__init__(
             "configuration",
             500,
-            'AgentOps runtime requires extras. Install with: pip install -e ".[rag,agentops]"',
+            'AgentOps runtime requires extras. Install with: pip install "my-orlando-experience[agentops]"',
         )
 
 

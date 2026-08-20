@@ -12,7 +12,7 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
   "fastapi==0.141.1",
   "pydantic==2.13.4",
-  "python-dotenv==1.0.1",
+  "python-dotenv==1.2.2",
   "uvicorn==0.34.0",
 ]
 
@@ -43,7 +43,7 @@ dev = [
   "httpx==0.28.1",
   "mypy==1.15.0",
   "pip-audit==2.7.3",
-  "pytest==8.3.5",
+  "pytest==9.0.3",
   "ruff==0.9.10",
 ]
 
@@ -55,6 +55,7 @@ include = ["src*"]
 orlando-agentops-quickstart = "src.agentops.cli.quickstart:main"
 orlando-agentops-eval = "src.agentops.cli.eval:main"
 orlando-agentops-gcp-preflight = "src.agentops.cli.preflight:main"
+orlando-agentops-grok-canary = "src.agentops.cli.grok_canary:main"
 
 [tool.setuptools.package-data]
 "src.agentops.evals" = ["cases.json"]

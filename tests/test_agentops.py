@@ -538,7 +538,7 @@ def test_missing_runtime_extras_are_sanitized(tmp_path, monkeypatch):
     )
     assert response.status_code == 500
     assert response.json() == {
-        "detail": 'AgentOps runtime requires extras. Install with: pip install -e ".[rag,agentops]"'
+        "detail": 'AgentOps runtime requires extras. Install with: pip install "my-orlando-experience[agentops]"'
     }
     assert "ImportError" not in response.text
     assert "Traceback" not in response.text
@@ -585,11 +585,12 @@ def test_agent_concurrency_limit(tmp_path, monkeypatch):
 
 
 def test_agent_canary_redacts_output_and_is_pending_without_key():
-    source = (REPO_ROOT / "scripts" / "agent_canary.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "src" / "agentops" / "cli" / "grok_canary.py").read_text(encoding="utf-8")
     assert "response_sha256" in source
     assert "response_chars" in source
     assert "citation_ids" in source
     assert "agent_path" in source
+    assert "os.getenv(\"XAI_API_KEY\")" in source
     env = os.environ.copy()
     env.pop("XAI_API_KEY", None)
     env["PYTHONPATH"] = str(REPO_ROOT)
