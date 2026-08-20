@@ -153,13 +153,29 @@ def test_eval_fixture_acceptance(tmp_path, monkeypatch):
     monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
     payload = load_cases()
     assert len(payload["cases"]) == 20
+    required = {
+        "grounding_status",
+        "citation_ids",
+        "safety_decision",
+        "tool_outcome",
+        "foreign_user_absence",
+    }
+    for case in payload["cases"]:
+        missing = required - set((case.get("expect") or {}).keys())
+        assert not missing, f"{case['id']} missing {missing}"
     report = asyncio.run(run_eval(seed=42, data_root=tmp_path / "eval-a"))
     again = asyncio.run(run_eval(seed=42, data_root=tmp_path / "eval-b"))
     metrics = report["metrics"]
     assert metrics["citation_validity"] == 1.0
     assert metrics["abstention_correctness"] == 1.0
+    assert metrics["grounded_case_success_rate"] == 1.0
+    assert metrics["tool_outcome_accuracy"] == 1.0
+    assert metrics["safety_decision_accuracy"] == 1.0
+    assert metrics["memory_precision_at_k"] == 1.0
+    assert metrics["memory_no_hit_accuracy"] == 1.0
     assert metrics["cross_user_leaks"] == 0
     assert metrics["case_count"] == 20
+    assert metrics["groundedness"] == metrics["grounded_case_success_rate"]
     assert [item["id"] for item in report["results"]] == [item["id"] for item in again["results"]]
     assert [item["grounding_status"] for item in report["results"]] == [
         item["grounding_status"] for item in again["results"]

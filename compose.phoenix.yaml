@@ -1,9 +1,9 @@
 services:
   phoenix:
-    image: arizephoenix/phoenix:latest
+    image: arizephoenix/phoenix:version-20.2.1
     ports:
-      - "6006:6006"
-      - "4317:4317"
+      - "127.0.0.1:6006:6006"
+      - "127.0.0.1:4317:4317"
     environment:
       PHOENIX_WORKING_DIR: /data
     volumes:

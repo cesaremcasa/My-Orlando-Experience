@@ -43,6 +43,9 @@ class AgentHealthResponse(BaseModel):
     agent_ready: bool = False
     memory_backend: str = "local"
     eval_backend: str = "local"
+    vertex_status: Literal[
+        "not_selected", "incomplete", "unprovisioned", "fake_client"
+    ] = "not_selected"
     vertex_ready: bool = False
     vertex_issues: list[str] = Field(default_factory=list)
 

@@ -24,7 +24,7 @@ class VertexMemoryClient(Protocol):
 
 
 class VertexMemoryStore:
-    """Optional Vertex AI Memory Bank adapter. Memory Bank is Pre-GA and not provisioned."""
+    """Fail-closed Vertex Memory Bank integration contract. Pre-GA and unprovisioned."""
 
     def __init__(self, client: VertexMemoryClient | None = None) -> None:
         self._client = client

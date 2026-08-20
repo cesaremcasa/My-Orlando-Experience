@@ -92,6 +92,16 @@ def ensure_tracing() -> None:
     _instrument_adk(provider)
 
 
+def force_flush(timeout_millis: int = 5000) -> bool:
+    ensure_tracing()
+    if _provider is None:
+        return True
+    flush = getattr(_provider, "force_flush", None)
+    if callable(flush):
+        return bool(flush(timeout_millis))
+    return True
+
+
 def current_trace_id() -> str | None:
     if not _active:
         return None

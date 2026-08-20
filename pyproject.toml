@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "my-orlando-experience"
-version = "0.4.0"
+version = "0.4.1"
 description = "Grounded Orlando retrieval and response service."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -12,7 +12,7 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
   "fastapi==0.141.1",
   "pydantic==2.13.4",
-  "python-dotenv==1.0.1",
+  "python-dotenv==1.2.2",
   "uvicorn==0.34.0",
 ]
 
@@ -29,9 +29,11 @@ agentops = [
   "arize-phoenix-otel==0.17.1",
   "faiss-cpu==1.9.0",
   "google-adk==2.7.1",
+  "httpx==0.28.1",
   "litellm==1.97.0",
   "openinference-instrumentation-google-adk==0.1.20",
   "opentelemetry-sdk==1.42.1",
+  "sentence-transformers==3.3.1",
   "websockets==15.0.1",
 ]
 gcp = [
@@ -41,13 +43,19 @@ dev = [
   "httpx==0.28.1",
   "mypy==1.15.0",
   "pip-audit==2.7.3",
-  "pytest==8.3.5",
+  "pytest==9.0.3",
   "ruff==0.9.10",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+[project.scripts]
+orlando-agentops-quickstart = "src.agentops.cli.quickstart:main"
+orlando-agentops-eval = "src.agentops.cli.eval:main"
+orlando-agentops-gcp-preflight = "src.agentops.cli.preflight:main"
+orlando-agentops-grok-canary = "src.agentops.cli.grok_canary:main"
 
 [tool.setuptools.package-data]
 "src.agentops.evals" = ["cases.json"]

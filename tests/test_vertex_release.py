@@ -15,10 +15,10 @@ from src.api import main
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_version_is_040():
-    assert main.app.version == "0.4.0"
+def test_version_is_041():
+    assert main.app.version == "0.4.1"
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert 'version = "0.4.0"' in pyproject
+    assert 'version = "0.4.1"' in pyproject
 
 
 def test_vertex_health_reports_incomplete_config(monkeypatch):
@@ -29,7 +29,70 @@ def test_vertex_health_reports_incomplete_config(monkeypatch):
     payload = agent_health_payload()
     assert payload["memory_backend"] == "vertex"
     assert payload["vertex_ready"] is False
+    assert payload["vertex_status"] == "incomplete"
     assert "GOOGLE_CLOUD_PROJECT is not set" in payload["vertex_issues"]
+
+
+def test_vertex_health_reports_missing_engine_when_project_set(monkeypatch):
+    monkeypatch.setenv("ORLANDO_MEMORY_BACKEND", "vertex")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "orlando-506100")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    monkeypatch.delenv("GOOGLE_CLOUD_AGENT_ENGINE_ID", raising=False)
+    reset_runtime()
+    payload = agent_health_payload()
+    assert payload["vertex_status"] == "incomplete"
+    assert payload["vertex_ready"] is False
+    assert "GOOGLE_CLOUD_AGENT_ENGINE_ID is not set" in payload["vertex_issues"]
+
+
+def test_local_backend_ignores_informational_gcp_project(monkeypatch):
+    monkeypatch.setenv("ORLANDO_MEMORY_BACKEND", "local")
+    monkeypatch.setenv("ORLANDO_EVAL_BACKEND", "local")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "orlando-506100")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    monkeypatch.delenv("GOOGLE_CLOUD_AGENT_ENGINE_ID", raising=False)
+    reset_runtime()
+    payload = agent_health_payload()
+    assert payload["memory_backend"] == "local"
+    assert payload["vertex_status"] == "not_selected"
+    assert payload["vertex_ready"] is False
+    assert payload["vertex_issues"] == []
+
+
+def test_vertex_unprovisioned_status_when_env_complete(monkeypatch):
+    monkeypatch.setenv("ORLANDO_MEMORY_BACKEND", "vertex")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "demo-project")
+    monkeypatch.setenv("GOOGLE_CLOUD_AGENT_ENGINE_ID", "engine")
+    import importlib.util
+
+    real = importlib.util.find_spec
+
+    def fake_spec(name, package=None):
+        if name == "google.cloud.aiplatform":
+            return object()
+        return real(name, package)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake_spec)
+    from src.agentops.settings import vertex_config
+
+    cfg = vertex_config()
+    assert cfg["status"] == "unprovisioned"
+    assert cfg["complete"] is True
+    assert any("Pre-GA" in item for item in cfg["issues"])
+
+
+def test_vertex_fake_client_health_status(tmp_path, monkeypatch):
+    monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("ORLANDO_MEMORY_BACKEND", "vertex")
+    store = VertexMemoryStore(client=FakeVertexMemoryClient())
+    reset_runtime()
+    from src.agentops.runtime import AgentRuntime, get_runtime
+
+    runtime = get_runtime()
+    runtime.memory = store
+    payload = agent_health_payload()
+    assert payload["vertex_status"] == "fake_client"
+    assert payload["vertex_ready"] is True
 
 
 def test_vertex_fake_client_isolates_users():
@@ -53,10 +116,13 @@ def test_vertex_byor_uses_grok_responses_not_gemini():
     assert "gemini" not in str(report).lower()
 
 
-def test_preflight_is_dry_run_only():
-    source = (REPO_ROOT / "scripts" / "gcp_preflight.py").read_text(encoding="utf-8")
-    assert "os.system" not in source
-    assert "subprocess" not in source
+def test_preflight_is_read_only_and_has_no_invalid_dry_run():
+    impl = (REPO_ROOT / "src" / "agentops" / "cli" / "preflight.py").read_text(encoding="utf-8")
+    wrapper = (REPO_ROOT / "scripts" / "gcp_preflight.py").read_text(encoding="utf-8")
+    assert "os.system" not in impl and "subprocess" not in impl
+    assert "--dry-run" not in impl
+    assert "PROPOSED COMMAND" in impl
+    assert "no deploy dry-run" in impl
     env = os.environ.copy()
     env["PYTHONPATH"] = str(REPO_ROOT)
     completed = subprocess.run(
@@ -71,6 +137,26 @@ def test_preflight_is_dry_run_only():
     assert "NOT PROVISIONED / APPROVAL REQUIRED" in completed.stdout
     assert "gcloud auth login" in completed.stdout
     assert "STOP" in completed.stdout
+    assert "--dry-run" not in completed.stdout
+    assert "billing: NOT ENABLED" in completed.stdout
+    assert "GOOGLE_CLOUD_AGENT_ENGINE_ID=NOT SET" in completed.stdout or "NOT SET" in completed.stdout
+    assert wrapper.count("subprocess") == 0
+
+
+def test_preflight_does_not_invoke_subprocess(monkeypatch, capsys):
+    def boom(*args, **kwargs):
+        raise AssertionError(f"subprocess invoked: {args}")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    monkeypatch.setattr(subprocess, "call", boom)
+    monkeypatch.setattr(subprocess, "check_output", boom)
+    from src.agentops.cli.preflight import main as preflight_main
+
+    assert preflight_main() == 0
+    captured = capsys.readouterr()
+    assert "PROPOSED COMMAND — DO NOT RUN WITHOUT APPROVAL" in captured.out
+    assert "gcloud services enable" in captured.out
 
 
 def test_import_health_does_not_load_vertex():
