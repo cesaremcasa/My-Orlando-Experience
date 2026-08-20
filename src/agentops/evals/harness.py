@@ -94,14 +94,16 @@ async def _run_case(case: dict[str, Any], memory: LocalMemoryStore) -> dict[str,
                 query=str(case["message"]),
                 top_k=3,
             )
+        safety_decision = await _actual_safety_decision(runtime, case, result)
         return {
             "id": case["id"],
             "kind": kind,
+            "user_id": str(case["user_id"]),
             "ok": True,
             "error": None,
             "grounding_status": result.grounding_status,
             "citation_ids": [str(item.source_id) for item in result.citations],
-            "citation_valid": bool(result.citations) if result.grounding_status == "grounded" else result.citations == [],
+            "citation_valid": _citation_valid(result, case.get("expect") or {}),
             "abstained": result.grounding_status == "abstained",
             "memory_ids": list(result.memory_ids),
             "memory_hit_ids": [hit.memory_id for hit in hits],
@@ -111,21 +113,23 @@ async def _run_case(case: dict[str, Any], memory: LocalMemoryStore) -> dict[str,
                 mid for mid in [hit.memory_id for hit in hits] if mid in label_ids.values()
             ],
             "label_ids": label_ids,
-            "safety_decision": "pass" if result.grounding_status == "grounded" else "abstain",
+            "safety_decision": safety_decision,
             "tool_outcome": "ok",
             "latency_ms": latency_ms,
             "expect": case.get("expect") or {},
         }
     except AgentOpsError as exc:
         latency_ms = round((time.perf_counter() - started) * 1000, 2)
+        expect = case.get("expect") or {}
         return {
             "id": case["id"],
             "kind": kind,
+            "user_id": str(case["user_id"]),
             "ok": False,
             "error": exc.code,
             "grounding_status": None,
             "citation_ids": [],
-            "citation_valid": True,
+            "citation_valid": list(expect.get("citation_ids") or []) == [],
             "abstained": False,
             "memory_ids": [],
             "memory_hit_ids": [],
@@ -136,8 +140,37 @@ async def _run_case(case: dict[str, Any], memory: LocalMemoryStore) -> dict[str,
             "safety_decision": "error",
             "tool_outcome": exc.code,
             "latency_ms": latency_ms,
-            "expect": case.get("expect") or {},
+            "expect": expect,
         }
+
+
+def _citation_valid(result: Any, expect: dict[str, Any]) -> bool:
+    actual_ids = [str(item.source_id) for item in result.citations]
+    expected_ids = list(expect.get("citation_ids") or [])
+    if expect.get("grounding_status") == "grounded":
+        return result.grounding_status == "grounded" and actual_ids == expected_ids and bool(actual_ids)
+    return actual_ids == expected_ids
+
+
+async def _actual_safety_decision(runtime: AgentRuntime, case: dict[str, Any], result: Any) -> str:
+    from src.agentops.runtime import _as_verdict
+
+    raw = None
+    session_service = getattr(runtime, "session_service", None)
+    if session_service is not None:
+        session = await session_service.get_session(
+            app_name="orlando-agentops",
+            user_id=str(case["user_id"]),
+            session_id=str(case["session_id"]),
+        )
+        if session is not None:
+            raw = dict(session.state).get("safety_verdict")
+    verdict = _as_verdict(raw)
+    if verdict is not None and verdict.verdict == "FAIL":
+        return "fail"
+    if result.grounding_status == "grounded":
+        return "pass"
+    return "abstain"
 
 
 def _score(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -148,8 +181,7 @@ def _score(results: list[dict[str, Any]]) -> dict[str, Any]:
     leaks = [
         item
         for item in results
-        if item["expect"].get("leakage") == 0
-        and any(user == item["expect"].get("foreign_user") for user in item.get("memory_hit_users") or [])
+        if any(user != item.get("user_id") for user in item.get("memory_hit_users") or [])
     ]
     precision_scores: list[float] = []
     no_hit_scores: list[float] = []
@@ -170,15 +202,13 @@ def _score(results: list[dict[str, Any]]) -> dict[str, Any]:
         precision_scores.append(len(set(retrieved) & relevant_ids) / len(retrieved))
     tool_correct = 0
     for item in results:
-        expected_tool = str(item["expect"].get("tool_outcome") or ("ok" if item["ok"] else item.get("error") or "ok"))
-        actual_tool = "ok" if item.get("tool_outcome") == "ok" else str(item.get("tool_outcome") or item.get("error") or "ok")
+        expected_tool = str(item["expect"]["tool_outcome"])
+        actual_tool = "ok" if item.get("tool_outcome") == "ok" else str(item.get("tool_outcome") or item.get("error"))
         if expected_tool == actual_tool:
             tool_correct += 1
     safety_correct = 0
     for item in results:
-        expected_safety = str(item["expect"].get("safety_decision") or ("pass" if item["expect"].get("grounding_status") == "grounded" else "abstain"))
-        if item.get("error") and item["expect"].get("error"):
-            expected_safety = "error"
+        expected_safety = str(item["expect"]["safety_decision"])
         actual_safety = str(item.get("safety_decision") or "error")
         if expected_safety == actual_safety:
             safety_correct += 1

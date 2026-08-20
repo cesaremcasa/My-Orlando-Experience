@@ -153,6 +153,16 @@ def test_eval_fixture_acceptance(tmp_path, monkeypatch):
     monkeypatch.setenv("ORLANDO_AGENTOPS_DATA_DIR", str(tmp_path))
     payload = load_cases()
     assert len(payload["cases"]) == 20
+    required = {
+        "grounding_status",
+        "citation_ids",
+        "safety_decision",
+        "tool_outcome",
+        "foreign_user_absence",
+    }
+    for case in payload["cases"]:
+        missing = required - set((case.get("expect") or {}).keys())
+        assert not missing, f"{case['id']} missing {missing}"
     report = asyncio.run(run_eval(seed=42, data_root=tmp_path / "eval-a"))
     again = asyncio.run(run_eval(seed=42, data_root=tmp_path / "eval-b"))
     metrics = report["metrics"]
