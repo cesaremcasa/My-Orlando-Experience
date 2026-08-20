@@ -6,5 +6,5 @@
 - FAISS for AgentOps is in-memory per search, not a persisted index.
 - ADK `SequentialAgent`/`ParallelAgent` emit deprecation warnings; topology is preserved.
 - Grounding is lexical overlap, not an independent truth guarantee.
-- Phoenix Compose is optional and local.
-- Locked third-party advisories (langchain, transformers, etc.) are recorded by pip-audit and not silently upgraded.
+- Phoenix Compose is optional, local, and pinned to `arizephoenix/phoenix:version-20.2.1`. In-memory OpenTelemetry is the CI path.
+- Locked third-party advisories are triaged in `docs/dependency-advisories.json`. CI stays green only for that accepted set; new findings fail the audit job. This is not a claim that dependencies are clean.

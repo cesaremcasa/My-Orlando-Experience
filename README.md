@@ -212,19 +212,22 @@ python src/respond/generate_response.py "What time does Magic Kingdom open?"
 
 ## Current Status (v0.4.1)
 
-This repository is a **portfolio-grade reference implementation** of a beta AgentOps path. GCP is **NOT PROVISIONED / APPROVAL REQUIRED**. See `docs/` and `orlando-agentops-gcp-preflight`.
+This repository is a **portfolio-grade reference implementation** of a beta AgentOps path. GCP is **NOT PROVISIONED / APPROVAL REQUIRED**. Project `orlando-506100` / `us-central1` may be set as informational identity. Billing is not enabled. `GOOGLE_CLOUD_AGENT_ENGINE_ID` is unset. See `docs/` and `orlando-agentops-gcp-preflight`. There is no independent GitHub review yet.
 
-| Evidence | Status |
-|-----------|--------|
-| Tested fake provider | yes |
-| Real Grok provider configured | yes, canary pending |
-| In-memory OpenTelemetry exporter | tested |
-| Live Phoenix collector | not yet canaried |
-| Local FAISS | tested (FakeEmbedder in CI/container) |
-| SentenceTransformer package | present in `agentops` extra; model download/canary not run in CI |
-| Vertex fake client | tested |
-| Real Vertex service | not implemented or provisioned (fail-closed scaffold, Memory Bank Pre-GA) |
-| Default container | fake HTTP path + local FAISS/FakeEmbedder; does not prove Vertex or Grok |
+| Capability | Evidence | Limitation |
+|---|---|---|
+| Async FastAPI | `/health`, `/query`, `/agent/*`, `/feedback` tested | No production SLO |
+| ADK topology | Sequential/Parallel graph tested with fake LLM | ADK deprecation warnings remain |
+| Grok provider | Configured (`XAI_MODEL`); fake path in CI | Real canary optional and separately reported |
+| Local memory | SQLite + in-memory FAISS add/search tested | FAISS not persisted; rebuilt per search |
+| SentenceTransformer | Package in `agentops` extra; import present; load is lazy | Model download/canary is not part of CI |
+| Phoenix / OpenTelemetry | In-memory exporter tested and redacted | Local collector canary separately reported: OTLP export into pinned `arizephoenix/phoenix:version-20.2.1`; REST span query was not used |
+| Feedback | Synthetic beta users, idempotent SQLite | No real PII or customer identities |
+| Evals | 20 CC0 cases; labeled precision, safety, tool, isolation | Wall-clock latency is not byte-deterministic |
+| Vertex | Fail-closed unprovisioned scaffold + fake client tests | No live Memory Bank or BYOR canary |
+| GCP | Read-only preflight; no mutation | Not provisioned; billing not enabled |
+| Docker | Fake HTTP smoke + FakeEmbedder/FAISS smoke; UID 10001 | Not a working Vertex or Grok image |
+| OAuth / MySQL / Harness / Java | — | Out of scope |
 
 Local container (fake runtime, no model download during build):
 
@@ -233,7 +236,7 @@ docker compose up --build api
 curl -s http://localhost:8080/health
 ```
 
-Optional Phoenix: `docker compose --profile phoenix up`. Live Phoenix collector is not yet canaried.
+Optional Phoenix: `docker compose --profile phoenix up` uses `arizephoenix/phoenix:version-20.2.1` on loopback. In-memory OpenTelemetry is tested in CI. A local collector canary is separately reported (`uv run python scripts/phoenix_collector_canary.py`).
 
 ---
 

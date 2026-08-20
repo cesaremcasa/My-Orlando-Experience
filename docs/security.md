@@ -1,6 +1,6 @@
 # Security and privacy
 
-- No secrets in git. `.env` is gitignored. Never print `XAI_API_KEY`.
+- No secrets in git. `.env` is gitignored. Never print `XAI_API_KEY`. CI runs Gitleaks (pinned action SHA) plus a private-key header grep. Findings are not uploaded as public artifacts.
 - Future Cloud Run deployments should load `XAI_API_KEY` from Secret Manager only.
 - Default `ORLANDO_TRACE_CONTENT=0`. Spans may hold IDs, hashes, sizes, scores, status, and latency — not prompts, responses, retrieved text, memory content, feedback reasons, or keys.
 - Memory is isolated by `X-Beta-User`. SQLite is authoritative. FAISS is rebuilt from user-filtered rows.

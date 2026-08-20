@@ -12,4 +12,4 @@ Local CLI: `orlando-agentops-eval --seed 42 --out <dir>` or `uv run python scrip
 - `safety_decision_accuracy`: public pass/abstain/error vs fixture expected decision.
 - `p50_ms` / `p95_ms`: wall-clock latency, not byte-deterministic.
 - Same seed produces the same case IDs, decisions, citations, memory outcomes, and non-timing metrics.
-- Vertex BYOR eval remains an unprovisioned scaffold. Phoenix dataset upload is optional and local-only. Live Phoenix collector is not yet canaried.
+- Vertex BYOR eval remains an unprovisioned scaffold. Phoenix dataset upload is optional and local-only. In-memory OpenTelemetry is tested in CI. A local Phoenix collector canary (`scripts/phoenix_collector_canary.py`) is separately reported: it proves OTLP export into `arizephoenix/phoenix:version-20.2.1` and collector logs. It does not query spans through a stable REST API. It is not a GitHub Actions check.
